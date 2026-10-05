@@ -1,15 +1,22 @@
 name: release
 
-# Push a tag such as v0.1.0 to build the packages and publish a GitHub release.
+# Push a tag such as v0.1.0, or run the workflow by hand with a version, to
+# build the packages and publish a GitHub release.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.1.0 (the tag v<version> is created)'
+        required: true
 
 permissions:
   contents: write
 
 env:
   NFPM_VERSION: 2.43.0
+  TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
 
 jobs:
   release:
@@ -25,13 +32,13 @@ jobs:
           curl -sSfL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin nfpm
       - name: build packages
-        run: packaging/build.sh "${GITHUB_REF_NAME}"
+        run: packaging/build.sh "$TAG"
       - name: check the deb package
         run: |
           sudo apt-get install -y -qq --no-install-recommends ./dist/*.deb > /dev/null
-          [ "$(mvn-devops --version)" = "${GITHUB_REF_NAME#v}" ]
+          [ "$(mvn-devops --version)" = "${TAG#v}" ]
       - name: publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "mvn-devops ${GITHUB_REF_NAME}" --generate-notes
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "mvn-devops $TAG" --generate-notes

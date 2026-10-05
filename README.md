@@ -336,7 +336,8 @@ run in Docker, set `DEVOPS_HOST` to an address that server can reach;
 
 ## Releasing
 
-Set the version in `VERSION`, commit, and push a tag:
+Set the version in `VERSION`, commit, and push a tag, or start the release
+workflow by hand under Actions > release > Run workflow with the version:
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0

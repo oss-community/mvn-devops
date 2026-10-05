@@ -1,0 +1,105 @@
+# Writing a module
+
+A module is a directory under `modules/<category>/<name>/`. The menu discovers
+it automatically; no other file has to change.
+
+## Files
+
+### `module.conf` (required)
+
+```bash
+MODULE_TITLE="Nexus Repository"
+MODULE_DESCRIPTION="Sonatype Nexus 3 for Maven releases and snapshots"   # shown in the menu
+MODULE_REQUIRES="scm/github"     # other modules that must be selected too (optional)
+MODULE_RUNS_IN=docker            # orchestrators only: host or docker
+```
+
+### `compose.yml` (optional)
+
+A docker compose fragment. The fragments of all selected modules are merged
+into one compose project (`devops-<project>`), so services reach each other by
+service name. Use named volumes for data. Every stored value is available for
+`${VAR}` substitution, plus `DEVOPS_HOME`, `DEVOPS_STATE`, `PROJECT_DIR` and
+`PROJECT_NAME`. Use them for paths, since relative paths are resolved against
+`.devops/`.
+
+### `module.sh` (optional)
+
+Hook functions. Each hook runs in its own subshell with the library loaded,
+`MODULE_ID` and `MODULE_DIR` set and the module's `module.conf` sourced.
+
+| Hook | Called by | Purpose |
+|---|---|---|
+| `module_secrets` | `secrets` | ask for values with `ask` / `ask_secret` |
+| `module_prepare` | `up`, before containers start | render config files, create keys |
+| `module_configure` | `configure`, after containers start | admin passwords, tokens, repositories |
+| `module_env` | every command | export pipeline variables with `pipeline_var` / `pipeline_secret` |
+| `module_stages` | `stages`, `render`, `run` | contribute stages with `stage` |
+| `module_urls` | `urls`, end of `setup` | print the web console and how to log in |
+| `module_render` | orchestrators: `render`, `publish` | write the pipeline definition |
+| `module_publish` | orchestrators: `publish` | install the pipeline |
+| `module_run` | orchestrators: `run` | run it |
+
+For orchestrators, `module_configure` runs during `publish` (after the tools are
+configured) instead of during `configure`.
+
+## Helpers
+
+```bash
+ask KEY "Question" [default]          # stored in .devops/values/KEY; kept on later runs
+ask_secret KEY "Question" [default]   # hidden input, masked everywhere
+value KEY [fallback]                  # read a value
+require_value KEY                     # read or fail
+set_value KEY VALUE [secret]          # store a computed value, e.g. a token
+random_password                       # a random default password
+
+pipeline_var KEY VALUE                # hand a variable to the pipeline
+pipeline_secret KEY VALUE             # same, masked
+
+stage ORDER PHASE NAME "MAVEN ARGS"   # PHASE is ci or cd; args may use $VARS
+pipeline_url SERVICE PORT HOST_PORT [PATH]   # service name or localhost, depending on the orchestrator
+host_url HOST_PORT [PATH]             # localhost URL for configure hooks
+
+compose ...                           # docker compose of the project, e.g. compose exec -T nexus ...
+wait_http URL [timeout] [status regex]
+log_step / log_ok / log_warn / log_dim / die / confirm
+```
+
+Stage arguments are embedded in single-quoted strings by the orchestrators, so
+they may not contain `'`, `\`, `|` or `${`. Use `$VAR` instead of `${VAR}`.
+
+## Example: a new artifact repository
+
+```
+modules/artifact/reposilite/
+  module.conf
+  compose.yml
+  module.sh
+```
+
+```bash
+# module.sh
+module_secrets() {
+  ask REPOSILITE_HOST_PORT "Reposilite port on this machine" 8085
+  ask_secret REPOSILITE_TOKEN "Reposilite deploy token" "$(random_password)"
+}
+
+module_env() {
+  pipeline_var REPOSILITE_URL "$(pipeline_url reposilite 8080 "$(value REPOSILITE_HOST_PORT)")/snapshots"
+  pipeline_secret REPOSILITE_TOKEN "$(value REPOSILITE_TOKEN)"
+}
+
+module_stages() {
+  stage 73 cd deploy-reposilite "deploy -DskipTests=true -P reposilite"
+}
+```
+
+A new category is a directory with a `category.conf`:
+
+```bash
+CATEGORY_TITLE="Security scanning"
+CATEGORY_ORDER=45          # position in the menu
+CATEGORY_MODE=multi        # required | single | multi
+```
+
+Run `tests/smoke.sh` and `shellcheck` after adding a module.

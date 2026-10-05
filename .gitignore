@@ -1,0 +1,4 @@
+.devops/
+.idea/
+*.iml
+.DS_Store

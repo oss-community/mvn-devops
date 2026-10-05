@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven settings used by mvn-devops pipelines. Every credential comes from an
+  environment variable that the selected modules export (see "devops.sh env -show").
+  The server ids must match the repository ids in the project's pom.xml.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+    <pluginGroups>
+        <pluginGroup>org.sonarsource.scanner.maven</pluginGroup>
+    </pluginGroups>
+
+    <servers>
+        <!-- GitHub Packages -->
+        <server>
+            <id>github</id>
+            <username>${env.GITHUB_USERNAME}</username>
+            <password>${env.GITHUB_PACKAGE_TOKEN}</password>
+        </server>
+        <!-- Nexus -->
+        <server>
+            <id>nexus</id>
+            <username>${env.NEXUS_ARTIFACTORY_USERNAME}</username>
+            <password>${env.NEXUS_ARTIFACTORY_PASSWORD}</password>
+        </server>
+        <server>
+            <id>nexus-snapshots</id>
+            <username>${env.NEXUS_ARTIFACTORY_USERNAME}</username>
+            <password>${env.NEXUS_ARTIFACTORY_PASSWORD}</password>
+        </server>
+        <server>
+            <id>nexus-release</id>
+            <username>${env.NEXUS_ARTIFACTORY_USERNAME}</username>
+            <password>${env.NEXUS_ARTIFACTORY_PASSWORD}</password>
+        </server>
+        <!-- JFrog Artifactory (distributionManagement ids "snapshots" / "releases") -->
+        <server>
+            <id>snapshots</id>
+            <username>${env.JFROG_ARTIFACTORY_USERNAME}</username>
+            <password>${env.JFROG_ARTIFACTORY_ENCRYPTED_PASSWORD}</password>
+        </server>
+        <server>
+            <id>releases</id>
+            <username>${env.JFROG_ARTIFACTORY_USERNAME}</username>
+            <password>${env.JFROG_ARTIFACTORY_ENCRYPTED_PASSWORD}</password>
+        </server>
+    </servers>
+
+    <profiles>
+        <profile>
+            <id>github</id>
+            <repositories>
+                <repository>
+                    <id>central</id>
+                    <url>https://repo1.maven.org/maven2</url>
+                </repository>
+                <repository>
+                    <id>github</id>
+                    <url>https://maven.pkg.github.com/${env.GITHUB_ARTIFACTORY_URL}</url>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
+</settings>

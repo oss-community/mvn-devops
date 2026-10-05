@@ -69,17 +69,8 @@ key when the `maven` orchestrator runs on your machine, and a deploy key
 (generated and registered on the repository by `configure`) when Jenkins or
 Concourse runs the build.
 
-Create the `site` branch once and point GitHub Pages at it:
-
-```bash
-git checkout --orphan site
-git rm -rf .
-echo "site" > index.html
-git add index.html && git commit -m "Initialize site" && git push origin site
-git checkout main
-```
-
-Then Settings > Pages > Source: branch `site`, folder `/ (root)`.
+Create the `site` branch once and point GitHub Pages at it, as described in
+[Project site on GitHub Pages](../README.md#project-site-on-github-pages).
 
 ## Tokens
 

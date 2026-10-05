@@ -130,6 +130,7 @@ cmd_init() {
 
 # ---------------------------------------------------------------- lifecycle
 
+# shellcheck disable=SC2120  # optional --reconfigure; setup calls it without arguments
 cmd_secrets() {
   [[ ${1:-} == --reconfigure ]] && export DEVOPS_RECONFIGURE=1
   load_project

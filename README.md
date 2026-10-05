@@ -83,6 +83,7 @@ Without questions, for scripts and CI:
 | `status`, `urls`, `logs [service]`, `compose ...` | operations |
 | `down` | stop containers, keep data |
 | `destroy` | remove containers and volumes, optionally the stored values |
+| `export-compose [dir]` | write one `docker-compose.yml` and its `.env` for the selected tools (default `.devops/compose`) |
 | `env [--show\|--windows]` | regenerate env files; `--show` masks secrets; `--windows` writes a `setx` script for IDEs on Windows |
 | `get <KEY>` | print one stored value, e.g. `get SONAR_ADMIN_PASSWORD` |
 | `modules`, `doctor` | list modules, check prerequisites |
@@ -237,6 +238,24 @@ console.
 The pipeline has a `ci` job, triggered by every push, and a `cd` job that runs
 all stages and is started by hand after `ci` passed. Tasks run in
 `maven:3.9-eclipse-temurin-17`. `fly` is downloaded from the server.
+
+## The compose file of your tools
+
+`up` also writes the selected tools as one plain compose project, so you can
+read it, keep it and run it without devops.sh:
+
+```bash
+../mvn-devops/devops.sh export-compose            # .devops/compose/docker-compose.yml + .env
+../mvn-devops/devops.sh export-compose ./docker   # or into a folder of the project
+cd docker && docker compose up -d
+```
+
+`docker-compose.yml` merges the compose fragments of the selected modules;
+paths are written out and every other `${VAR}` (ports, passwords) is read from
+the `.env` next to it. `.env` holds the passwords, so it is `chmod 600` and,
+outside `.devops`, added to a `.gitignore` in that folder. The compose project
+name is `devops-<project>`, the same one devops.sh uses, so both manage the
+same containers. Tools on an existing server are not in the file.
 
 ## Where the tools run
 

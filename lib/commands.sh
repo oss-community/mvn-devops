@@ -153,6 +153,7 @@ cmd_up() {
   if compose_files | grep -q /orchestrator/jenkins/ && [[ $(docker_host_default) != localhost ]]; then
     log_warn "Jenkins mounts files from $DEVOPS_STATE, which a Docker daemon on another machine cannot see. Run devops.sh on the Docker machine instead."
   fi
+  compose_export > /dev/null
   log_step "Starting containers"
   compose up -d --build --remove-orphans
 }
@@ -269,6 +270,8 @@ cmd_logs() { load_project; compose logs -f --tail 200 "$@"; }
 
 # Pass-through to docker compose with the project's files and env.
 cmd_compose() { load_project; env_generate; compose "$@"; }
+
+cmd_export_compose() { load_project; env_generate; compose_export "$@"; }
 
 cmd_down() { load_project; compose down; }
 

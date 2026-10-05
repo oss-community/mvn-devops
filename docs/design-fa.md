@@ -65,6 +65,10 @@ modules/artifact/nexus/
 
 برای همین stage ها هر plugin رو مستقیم با مختصات کاملش صدا می‌زنن و تنظیماتش رو با `-D` می‌دن. مثلاً `maven-deploy-plugin:3.1.3:deploy -DaltSnapshotDeploymentRepository=nexus-snapshots::<url>`. اطلاعات ورود هم از `templates/settings.xml` خود فریمورک میاد که با `-gs` (global settings) پاس داده می‌شه. نتیجه اینکه developer به pom پروژه‌اش هیچ پروفایل، `distributionManagement` یا settings اضافه نمی‌کنه. اگه پروژه پروفایل یا settings خودش رو داشته باشه، از طریق مقادیر `MAVEN_PROFILES` و `MAVEN_SETTINGS` هنوز می‌شه ازشون استفاده کرد.
 
+## فایل docker-compose ابزارها
+
+بعد از انتخاب ابزارها، `up` (یا `devops.sh export-compose [پوشه]`) یه `docker-compose.yml` کامل از ابزارهای انتخاب‌شده می‌سازه، به‌همراه یه `.env` کنارش. پیش‌فرض توی `.devops/compose` هست. با این فایل‌ها developer می‌تونه بدون devops.sh و فقط با `docker compose up -d` ابزارها رو بالا بیاره. رمزها داخل yml نیستن و از `.env` خونده می‌شن. `.env` دسترسی 600 داره و بیرون از `.devops` به `.gitignore` اضافه می‌شه.
+
 ## ابزارها لزوماً روی localhost نیستن
 
 هر ابزاری که سرور داره (SonarQube، Nexus، Artifactory، Jenkins، Concourse) دو حالت داره:

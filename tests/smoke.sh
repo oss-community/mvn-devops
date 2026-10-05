@@ -44,6 +44,9 @@ for orchestrator in maven jenkins concourse; do
   esac
   if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then
     devops compose config -q || fail "$orchestrator: compose config is invalid"
+    devops export-compose > /dev/null
+    ( cd "$project/.devops/compose" && docker compose config -q ) || fail "$orchestrator: exported compose is invalid"
+    grep -q 'PASSWORD: \${' "$project/.devops/compose/docker-compose.yml" || fail "$orchestrator: exported compose should keep \${VARS}"
   fi
   printf 'ok  %s\n' "$orchestrator"
 done

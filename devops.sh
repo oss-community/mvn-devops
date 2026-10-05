@@ -42,6 +42,8 @@ Pipeline
 Operations
   status | urls | logs [service] | down | destroy
   compose ...  run docker compose with the project's files (e.g. compose ps)
+  export-compose [dir]  write one docker-compose.yml + .env of the selected tools
+                        (default: .devops/compose; also written by up)
   env          regenerate env files  [--show | --windows]
   get <KEY>    print one stored value (e.g. an admin password)
   modules      list available modules
@@ -76,6 +78,7 @@ main() {
   case $command in
     init|setup|secrets|up|configure|publish|stages|render|run|status|urls|logs|down|destroy|compose|env|get|modules|doctor)
       "cmd_$command" "$@" ;;
+    export-compose) cmd_export_compose "$@" ;;
     help) usage ;;
     *) usage; die "Unknown command '$command'" ;;
   esac

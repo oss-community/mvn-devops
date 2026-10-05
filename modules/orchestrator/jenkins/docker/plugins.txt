@@ -6,3 +6,4 @@ credentials
 credentials-binding
 plain-credentials
 timestamper
+github

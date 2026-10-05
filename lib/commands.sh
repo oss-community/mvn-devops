@@ -278,6 +278,7 @@ cmd_down() { load_project; compose down; }
 cmd_destroy() {
   load_project
   confirm "Remove all containers AND their data volumes for $PROJECT_NAME?" n || { log_info "Cancelled."; return; }
+  modules_hook module_destroy
   compose down --volumes --remove-orphans
   if confirm "Also delete stored values and generated files in $DEVOPS_STATE?" n; then
     rm -rf "$DEVOPS_STATE"
@@ -310,5 +311,13 @@ cmd_doctor() {
     if docker compose version > /dev/null 2>&1; then log_ok "docker compose"; else log_warn "docker compose plugin not found"; ok=0; fi
     if docker info > /dev/null 2>&1; then log_ok "docker daemon reachable on $(docker_host_default)"; else log_warn "docker daemon is not running"; ok=0; fi
   fi
-  if (( ok )); then log_ok "All good"; else log_warn "Some tools are missing; see README.md#prerequisites"; fi
+  # Only site publishing with the maven orchestrator needs your own SSH key.
+  if command -v ssh > /dev/null; then
+    if ssh -T -o BatchMode=yes -o ConnectTimeout=5 "git@$(github_host)" 2>&1 | grep -q 'successfully authenticated'; then
+      log_ok "SSH key accepted by $(github_host)"
+    else
+      log_warn "No SSH key accepted by $(github_host); needed only to publish the site from this machine (docs/github-setup.md)"
+    fi
+  fi
+  if (( ok )); then log_ok "All good"; else log_warn "Some tools are missing; see docs/prerequisites.md"; fi
 }

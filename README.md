@@ -62,6 +62,11 @@ the same way. `mvn-devops --version` prints the installed version.
 
 ## Quick start
 
+First create the GitHub token(s) and, for site publishing with the `maven`
+orchestrator, an SSH key: see [docs/github-setup.md](docs/github-setup.md).
+Install the tools listed above ([docs/prerequisites.md](docs/prerequisites.md)).
+IntelliJ settings that match the pipeline are in [docs/ide.md](docs/ide.md).
+
 ```bash
 cd my-maven-project
 mvn-devops setup      # menu, questions, containers, tokens, pipeline
@@ -103,8 +108,9 @@ Without questions, for scripts and CI:
 | `run` | run the pipeline. maven: `--dry-run`, `--from <stage>`, `--only <stage>`, `--phase ci\|cd`. concourse: `--phase ci\|cd` |
 | `status`, `urls`, `logs [service]`, `compose ...` | operations |
 | `down` | stop containers, keep data |
-| `destroy` | remove containers and volumes, optionally the stored values |
+| `destroy` | remove containers and volumes, the deploy key and webhook on GitHub, optionally the stored values |
 | `export-compose [dir]` | write one `docker-compose.yml` and its `.env` for the selected tools (default `.devops/compose`) |
+| `release [--version X] [--next Y] [--dry-run] [--no-push]` | release the project, see [Releasing your project](#releasing-your-project) |
 | `env [--show\|--windows]` | regenerate env files; `--show` masks secrets; `--windows` writes a `setx` script for IDEs on Windows |
 | `get <KEY>` | print one stored value, e.g. `get SONAR_ADMIN_PASSWORD` |
 | `modules`, `doctor` | list modules, check prerequisites |
@@ -119,6 +125,12 @@ Without questions, for scripts and CI:
 | Code quality | any | `sonarqube` |
 | Artifact repositories | any | `jfrog`, `nexus`, `github-packages` |
 | Project site | any | `github-pages` |
+
+**Artifactory OSS** does not allow creating repositories through its API.
+After `configure`, open Artifactory, choose Quick Setup > Maven and enter the
+repository prefix you gave in `secrets` (`JFROG_ARTIFACTORY_REPOSITORY_PREFIX`),
+so `<prefix>-libs-release-local` and `<prefix>-libs-snapshot-local` exist.
+`configure` creates them itself on the Pro editions.
 
 Default stages with every module selected (plugin coordinates shortened):
 
@@ -253,7 +265,15 @@ variables exported only for that process. `render` also writes
 needed plugins, skips the setup wizard and configures everything with
 Configuration as Code: the admin user, one secret-text credential per secret and
 a pipeline job generated from the stages. `run` triggers the job and streams its
-console.
+console. There is no login to the UI and no API token to create by hand:
+devops.sh talks to its own Jenkins with the admin password over the REST API.
+
+Builds also start on every push, chosen with `JENKINS_TRIGGER` in `secrets`:
+`poll` (default) checks the repository every two minutes, `webhook` registers
+a GitHub webhook to `JENKINS_PUBLIC_URL/github-webhook/` (Jenkins must be
+reachable from GitHub, see [docs/ngrok.md](docs/ngrok.md), and the token needs
+`admin:repo_hook`), `none` builds only on `run`. Either trigger starts working
+after the first build, which records the repository.
 
 **concourse** runs `concourse quickstart` (web and worker in one container).
 The pipeline has a `ci` job, triggered by every push, and a `cd` job that runs
@@ -334,7 +354,31 @@ When an existing Jenkins or Concourse server runs the pipeline and some tools
 run in Docker, set `DEVOPS_HOST` to an address that server can reach;
 `publish` warns when it is `localhost`.
 
-## Releasing
+## Releasing your project
+
+`devops.sh release` releases the Maven project without maven-release-plugin, so
+the pom needs no `<scm>` and no `<distributionManagement>`:
+
+1. sets the release version in every module (`1.2.0-SNAPSHOT` becomes `1.2.0`),
+   commits "Release 1.2.0" and tags `v1.2.0`
+2. runs the deploy stages of the selected artifact repositories
+3. sets the next development version (`1.2.1-SNAPSHOT`) and commits it
+4. pushes the branch and the tag
+
+```bash
+devops.sh release --dry-run                          # show what would happen
+devops.sh release                                    # 1.2.0, then 1.2.1-SNAPSHOT
+devops.sh release --version 2.0.0 --next 2.1.0-SNAPSHOT
+devops.sh release --no-push                          # check locally, push yourself
+```
+
+It runs on your machine with `mvn` and git, needs a clean working tree and
+pushes with your own git credentials or SSH key. Nothing is pushed before
+step 4: if a step fails, the release commit and the tag are rolled back. To
+undo a release that was already pushed, delete the tag
+(`git push origin :refs/tags/v1.2.0`) and revert the two commits.
+
+## Releasing mvn-devops
 
 Set the version in `VERSION`, commit, and push a tag, or start the release
 workflow by hand under Actions > release > Run workflow with the version:

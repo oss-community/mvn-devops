@@ -41,6 +41,7 @@ Hook functions. Each hook runs in its own subshell with the library loaded,
 | `module_env` | every command | export pipeline variables with `pipeline_var` / `pipeline_secret` |
 | `module_stages` | `stages`, `render`, `run` | contribute stages with `stage` |
 | `module_urls` | `urls`, end of `setup` | print the web console and how to log in |
+| `module_destroy` | `destroy`, before containers are removed | undo what `configure` did outside Docker (deploy keys, webhooks) |
 | `module_render` | orchestrators: `render`, `publish` | write the pipeline definition |
 | `module_publish` | orchestrators: `publish` | install the pipeline |
 | `module_run` | orchestrators: `run` | run it |

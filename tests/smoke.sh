@@ -37,6 +37,7 @@ for orchestrator in maven jenkins concourse; do
     jenkins)
       grep -q "credentials('SONAR_TOKEN')" "$project/.devops/generated/Jenkinsfile" || fail "jenkins: credential missing"
       grep -q "pipelineJob('demo-app')" "$project/.devops/generated/jenkins/casc.yaml" || fail "jenkins: job missing"
+      grep -q "pollSCM('H/2 \* \* \* \*')" "$project/.devops/generated/Jenkinsfile" || fail "jenkins: poll trigger missing"
       grep -q '^SONAR_URL=http://sonarqube:9000$' <<< "$env_out" || fail "jenkins: SONAR_URL should use the service name" ;;
     concourse)
       grep -q 'passed: \[ci\]' "$project/.devops/generated/concourse/pipeline.yml" || fail "concourse: cd job missing"
@@ -76,5 +77,13 @@ grep -q "SONAR_URL = 'https://sonar.acme.test'" "$jenkinsfile" || fail "existing
 grep -q "credentialsId: 'demo-app-github-https'" "$jenkinsfile" || fail "existing jenkins: checkout credential"
 devops compose config --services 2>&1 | grep -q "No selected module needs containers" || fail "existing servers: no container expected"
 printf 'ok  existing servers\n'
+
+# release: next development version
+# shellcheck source=../lib/release.sh
+source "$ROOT/lib/release.sh"
+for pair in 1.2.0:1.2.1-SNAPSHOT 1.9:1.10-SNAPSHOT 2.0.0-RC1:2.0.0-RC2-SNAPSHOT 3:4-SNAPSHOT; do
+  [[ $(next_snapshot "${pair%%:*}") == "${pair#*:}" ]] || fail "release: next_snapshot ${pair%%:*}"
+done
+printf 'ok  release versions\n'
 
 printf 'All smoke tests passed\n'

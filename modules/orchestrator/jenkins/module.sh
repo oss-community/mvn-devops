@@ -23,11 +23,55 @@ module_secrets() {
     log_dim "  git, credentials-binding, plain-credentials and timestamper."
     ask JENKINS_ADMIN_USER "Jenkins user that may create jobs and credentials" admin
     ask_secret JENKINS_API_TOKEN "API token of $(value JENKINS_ADMIN_USER) (user menu > Security > API Token)"
-    return
+  else
+    ask JENKINS_HOST_PORT "Jenkins port on the Docker machine" 8080
+    ask JENKINS_ADMIN_USER "Jenkins admin user" admin
+    ask_secret JENKINS_ADMIN_PASSWORD "Jenkins admin password" "$(random_password)"
   fi
-  ask JENKINS_HOST_PORT "Jenkins port on the Docker machine" 8080
-  ask JENKINS_ADMIN_USER "Jenkins admin user" admin
-  ask_secret JENKINS_ADMIN_PASSWORD "Jenkins admin password" "$(random_password)"
+  ask JENKINS_TRIGGER "Start a build on every push: poll, webhook or none" poll
+  if [[ $(value JENKINS_TRIGGER) == webhook ]]; then
+    log_dim "  GitHub must reach Jenkins; for Jenkins on your machine use an ngrok URL (docs/ngrok.md)."
+    ask JENKINS_PUBLIC_URL "Public URL of Jenkins for the GitHub webhook" "$(value JENKINS_SERVER_URL)"
+  fi
+}
+
+# GitHub calls <public url>/github-webhook/ on every push (github plugin).
+webhook_url() { printf '%s/github-webhook/' "$(value JENKINS_PUBLIC_URL | sed 's:/*$::')"; }
+
+# Id of the repository webhook pointing to this Jenkins, if any.
+webhook_id() {
+  github_api GET "/repos/$(value GITHUB_REPOSITORY)/hooks" \
+    | jq -r --arg u "$(webhook_url)" '.[]? | select(.config.url == $u) | .id' | head -n 1
+}
+
+register_webhook() {
+  local body status
+  [[ $(value JENKINS_TRIGGER poll) == webhook ]] || return 0
+  [[ -n $(value JENKINS_PUBLIC_URL) ]] || { log_warn "JENKINS_PUBLIC_URL is empty; no webhook registered."; return 0; }
+  if [[ -n $(webhook_id) ]]; then
+    log_dim "  webhook $(webhook_url) already registered"
+    return 0
+  fi
+  body=$(jq -nc --arg u "$(webhook_url)" '{name: "web", active: true, events: ["push"], config: {url: $u, content_type: "json"}}')
+  status=$(github_api POST "/repos/$(value GITHUB_REPOSITORY)/hooks" --data "$body" -o /dev/null -w '%{http_code}')
+  if [[ $status == 201 ]]; then
+    log_ok "Registered the GitHub webhook $(webhook_url)"
+  else
+    log_warn "Could not register the webhook (HTTP $status). The token needs admin:repo_hook (docs/github-setup.md)."
+  fi
+}
+
+# destroy: remove the webhook this project registered.
+module_destroy() {
+  local id
+  [[ $(value JENKINS_TRIGGER poll) == webhook && -n $(value JENKINS_PUBLIC_URL) ]] || return 0
+  id=$(webhook_id)
+  [[ -n $id ]] || return 0
+  if [[ $(github_api DELETE "/repos/$(value GITHUB_REPOSITORY)/hooks/$id" -o /dev/null -w '%{http_code}') == 204 ]]; then
+    log_ok "Removed the GitHub webhook $(webhook_url)"
+  else
+    log_warn "Could not remove the GitHub webhook $(webhook_url); delete it under Settings > Webhooks."
+  fi
 }
 
 groovy_escape() { local v=${1//\\/\\\\}; printf '%s' "${v//\'/\\\'}"; }
@@ -38,6 +82,11 @@ render_jenkinsfile() {
   flags=$(maven_flags "" "$CI_SETTINGS")
   printf 'pipeline {\n  agent any\n'
   printf '  options {\n    timestamps()\n    disableConcurrentBuilds()\n  }\n'
+  # Triggers take effect after the first build, which records the repository.
+  case $(value JENKINS_TRIGGER poll) in
+    poll) printf "  triggers {\n    pollSCM('H/2 * * * *')\n  }\n" ;;
+    webhook) printf '  triggers {\n    githubPush()\n  }\n' ;;
+  esac
   printf '  environment {\n'
   while IFS= read -r key; do
     printf "    %s = credentials('%s')\n" "$key" "$(credential_id "$key")"
@@ -222,6 +271,7 @@ publish_existing() {
 }
 
 module_publish() {
+  register_webhook
   if server_external JENKINS; then
     publish_existing
     log_ok "Job '$(job_name)' is ready at $(jenkins_url)/job/$(job_name)/"

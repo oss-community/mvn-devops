@@ -28,6 +28,8 @@ source "$DEVOPS_HOME/lib/pipeline.sh"
 source "$DEVOPS_HOME/lib/docker.sh"
 # shellcheck source=lib/commands.sh
 source "$DEVOPS_HOME/lib/commands.sh"
+# shellcheck source=lib/release.sh
+source "$DEVOPS_HOME/lib/release.sh"
 
 usage() {
   cat <<EOF
@@ -46,6 +48,8 @@ Pipeline
   stages       show the stages contributed by the selected tools
   render       generate the pipeline files into .devops/generated
   run          run the pipeline  (maven: [--dry-run] [--from s] [--only s] [--phase ci|cd])
+  release      release version, deploy, next snapshot, push
+                 [--version X] [--next Y-SNAPSHOT] [--dry-run] [--no-push]
 
 Operations
   status | urls | logs [service] | down | destroy
@@ -86,7 +90,7 @@ main() {
 
   local command=$1; shift
   case $command in
-    init|setup|secrets|up|configure|publish|stages|render|run|status|urls|logs|down|destroy|compose|env|get|modules|doctor)
+    init|setup|secrets|up|configure|publish|stages|render|run|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release)
       "cmd_$command" "$@" ;;
     export-compose) cmd_export_compose "$@" ;;
     help) usage ;;

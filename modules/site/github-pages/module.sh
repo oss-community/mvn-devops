@@ -37,6 +37,20 @@ module_configure() {
   esac
 }
 
+# destroy: remove the deploy key configure registered.
+module_destroy() {
+  local repo id
+  repo=$(value GITHUB_REPOSITORY)
+  [[ -n $repo && -f "$DEVOPS_KEYS/github_deploy" ]] || return 0
+  id=$(github_api GET "/repos/$repo/keys" | jq -r --arg t "mvn-devops $PROJECT_NAME" '.[]? | select(.title == $t) | .id' | head -n 1)
+  [[ -n $id ]] || return 0
+  if [[ $(github_api DELETE "/repos/$repo/keys/$id" -o /dev/null -w '%{http_code}') == 204 ]]; then
+    log_ok "Removed the deploy key from $repo"
+  else
+    log_warn "Could not remove the deploy key 'mvn-devops $PROJECT_NAME'; delete it under Settings > Deploy keys."
+  fi
+}
+
 # Containers get the deploy key as one base64 line; the pipeline writes it to ~/.ssh.
 module_env() {
   local key="$DEVOPS_KEYS/github_deploy"

@@ -37,3 +37,6 @@ mvn_deploy_args() {
   printf 'package -DskipTests=true%s %s -DaltSnapshotDeploymentRepository=%s::%s -DaltReleaseDeploymentRepository=%s::%s' \
     "$(mvn_attach_goals)" "$(mvn_deploy)" "$1" "$2" "$3" "$4"
 }
+
+mvn_versions_set() { mvn_plugin MVN_VERSIONS_VERSION org.codehaus.mojo:versions-maven-plugin 2.18.0 set; }
+mvn_evaluate()     { mvn_plugin MVN_HELP_VERSION org.apache.maven.plugins:maven-help-plugin 3.5.1 evaluate; }

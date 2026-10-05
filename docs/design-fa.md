@@ -107,8 +107,18 @@ init  →  secrets  →  up  →  configure  →  publish  →  run
 6. **تست**: `tests/smoke.sh` برای هر سه orchestrator، shellcheck، و workflow ِ GitHub Actions.
 7. **مستندات**: README، راهنمای نوشتن ماژول، و نیازمندی‌های پروژه‌ی Maven.
 
+## راهنماهای جانبی
+
+- [github-setup.md](github-setup.md): ساخت توکن‌های GitHub با scope های لازم، و کلید SSH
+- [prerequisites.md](prerequisites.md): نصب پیش‌نیازها برای هر سیستم‌عامل
+- [ngrok.md](ngrok.md): در دسترس گذاشتن Jenkins ِ محلی برای webhook ِ GitHub
+- [ide.md](ide.md): تنظیمات IntelliJ (Checkstyle، coverage)
+
+Jenkins به لاگین در UI یا ساختن دستی API token نیاز نداره. devops.sh با رمز admin و REST API باهاش کار می‌کنه. اجرای خودکار با هر push با `JENKINS_TRIGGER` تنظیم می‌شه (`poll`، `webhook` یا `none`).
+
+دستور `release` نسخه‌ی release رو تنظیم می‌کنه، commit و tag می‌زنه، stage های deploy رو اجرا می‌کنه، نسخه‌ی SNAPSHOT ِ بعدی رو می‌ذاره و push می‌کنه. اگه وسط کار خطا بده، همه‌چیز برمی‌گرده.
+
 ## گام‌های بعدی پیشنهادی
 
 - ماژول‌های بیشتر: GitLab در دسته‌ی scm، GitHub Actions به‌عنوان orchestrator، OWASP Dependency-Check در quality، Reposilite در artifact.
-- مرحله‌ی release (`release:prepare release:perform`) به‌عنوان یه stage جدا در فاز cd.
 - پشتیبانی از Podman.

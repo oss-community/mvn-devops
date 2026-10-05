@@ -28,7 +28,7 @@ module_secrets() {
   ask GIT_BRANCH "Branch the pipeline builds" "$(detect_branch)"
   ask GITHUB_USERNAME "GitHub username" "$(git config --global user.name 2>/dev/null || true)"
   ask GITHUB_EMAIL "GitHub email" "$(git config --global user.email 2>/dev/null || true)"
-  log_dim "  Token scopes: repo, read:org, write:packages, read:packages, admin:public_key"
+  log_dim "  Token scopes: repo (+ write:packages, read:packages without a packages token). See docs/github-setup.md"
   ask_secret GITHUB_TOKEN "GitHub personal access token"
   ask_secret GITHUB_PACKAGE_TOKEN "GitHub Packages token (empty: use the token above)"
 }

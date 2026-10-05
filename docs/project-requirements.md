@@ -74,6 +74,5 @@ Create the `site` branch once and point GitHub Pages at it, as described in
 
 ## Tokens
 
-The GitHub token needs `repo`, `read:org`, `write:packages`, `read:packages` and
-`admin:public_key` (the last one only to register the deploy key). A separate
-packages token is optional.
+See [github-setup.md](github-setup.md) for the GitHub tokens, their scopes and
+the SSH key.

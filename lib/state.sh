@@ -213,6 +213,25 @@ env_show() {
 
 # ---------------------------------------------------------------- URLs
 
+# The machine Docker runs on, as reached from the machine running devops.sh
+# and mvn.  localhost unless DOCKER_HOST (or the current docker context) points
+# to another machine, e.g. DOCKER_HOST=ssh://user@build-vm.
+docker_host_default() {
+  local endpoint=${DOCKER_HOST:-} host
+  if [[ -z $endpoint ]] && command -v docker > /dev/null; then
+    endpoint=$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2> /dev/null || true)
+  fi
+  case $endpoint in
+    ssh://*|tcp://*)
+      host=${endpoint#*://}; host=${host#*@}; host=${host%%/*}
+      if [[ $host == \[* ]]; then host=${host%%]*}]; else host=${host%%:*}; fi
+      printf '%s' "$host" ;;
+    *) printf 'localhost' ;;
+  esac
+}
+
+devops_host() { value DEVOPS_HOST localhost; }
+
 # Where does the pipeline run?  "host" (plain maven) or "docker" (Jenkins,
 # Concourse).  Pipeline URLs must use container hostnames in the latter case.
 pipeline_url() {
@@ -220,9 +239,9 @@ pipeline_url() {
   if [[ ${DEVOPS_RUNS_IN:-host} == docker ]]; then
     printf 'http://%s:%s%s' "$service" "$internal_port" "$path"
   else
-    printf 'http://localhost:%s%s' "$host_port" "$path"
+    host_url "$host_port" "$path"
   fi
 }
 
-# URL used by the framework itself, which always runs on the host.
-host_url() { printf 'http://localhost:%s%s' "$1" "${2:-}"; }
+# URL used by the framework itself and by mvn with the maven orchestrator.
+host_url() { printf 'http://%s:%s%s' "$(devops_host)" "$1" "${2:-}"; }

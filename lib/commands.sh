@@ -135,6 +135,8 @@ cmd_secrets() {
   [[ ${1:-} == --reconfigure ]] && export DEVOPS_RECONFIGURE=1
   load_project
   state_ensure_dirs
+  log_step "Docker machine"
+  ask DEVOPS_HOST "Address of the machine Docker runs on, as reached from here" "$(docker_host_default)"
   modules_hook module_secrets
   env_generate
   log_ok "Values stored in $DEVOPS_VALUES"
@@ -145,6 +147,9 @@ cmd_up() {
   env_generate
   modules_hook module_prepare
   env_generate
+  if [[ " ${MODULES//$'\n'/ } " == *" orchestrator/jenkins "* && $(docker_host_default) != localhost ]]; then
+    log_warn "Jenkins mounts files from $DEVOPS_STATE, which a Docker daemon on another machine cannot see. Run devops.sh on the Docker machine instead."
+  fi
   log_step "Starting containers"
   compose up -d --build --remove-orphans
 }
@@ -293,7 +298,7 @@ cmd_doctor() {
   done
   if command -v docker > /dev/null; then
     if docker compose version > /dev/null 2>&1; then log_ok "docker compose"; else log_warn "docker compose plugin not found"; ok=0; fi
-    if docker info > /dev/null 2>&1; then log_ok "docker daemon reachable"; else log_warn "docker daemon is not running"; ok=0; fi
+    if docker info > /dev/null 2>&1; then log_ok "docker daemon reachable on $(docker_host_default)"; else log_warn "docker daemon is not running"; ok=0; fi
   fi
   if (( ok )); then log_ok "All good"; else log_warn "Some tools are missing; see README.md#prerequisites"; fi
 }

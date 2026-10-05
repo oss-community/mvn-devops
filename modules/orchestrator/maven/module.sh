@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 # Local orchestrator: runs every stage with mvn on this machine.
-# The tools still run in containers and are reached through localhost.
+# The tools still run in containers, on this machine or on the one DOCKER_HOST
+# points to, and are reached through DEVOPS_HOST.
 
 # Writes a standalone script, handy for IDE run configurations.
 module_render() {

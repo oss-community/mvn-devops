@@ -60,8 +60,8 @@ stage ORDER PHASE NAME "MAVEN ARGS"   # PHASE is ci or cd; args may use $VARS
 shell_stage ORDER PHASE NAME "CMD"    # a POSIX shell command in the project root instead of mvn
 mvn_plugin KEY group:artifact VERSION GOAL   # full plugin coordinates, version overridable per project
 mvn_deploy_args SNAP_ID SNAP_URL REL_ID REL_URL   # package + attach + deploy without distributionManagement
-pipeline_url SERVICE PORT HOST_PORT [PATH]   # service name or localhost, depending on the orchestrator
-host_url HOST_PORT [PATH]             # localhost URL for configure hooks
+pipeline_url SERVICE PORT HOST_PORT [PATH]   # service name or DEVOPS_HOST, depending on the orchestrator
+host_url HOST_PORT [PATH]             # DEVOPS_HOST URL for configure hooks
 
 compose ...                           # docker compose of the project, e.g. compose exec -T nexus ...
 wait_http URL [timeout] [status regex]

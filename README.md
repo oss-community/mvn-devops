@@ -215,7 +215,7 @@ secrets are never printed: `env --show` masks them and the orchestrators bind
 them as masked credentials.
 
 URLs handed to the pipeline depend on where it runs: with the `maven`
-orchestrator they point to `localhost:<port>`, with Jenkins or Concourse to the
+orchestrator they point to `localhost:<port>` (or the Docker machine, see [Running on another machine](#running-on-another-machine)), with Jenkins or Concourse to the
 compose service name (`http://sonarqube:9000`), because the build runs inside
 the same Docker network.
 
@@ -235,6 +235,36 @@ console.
 The pipeline has a `ci` job, triggered by every push, and a `cd` job that runs
 all stages and is started by hand after `ci` passed. Tasks run in
 `maven:3.9-eclipse-temurin-17`. `fly` is downloaded from the server.
+
+## Running on another machine
+
+The tools can run on a VM or build server instead of your own machine. There
+are two ways to do it.
+
+**Everything on the VM.** Clone mvn-devops and the project on the VM and run
+`devops.sh` there, exactly as on your machine. Answer the `DEVOPS_HOST`
+question in `secrets` with the VM's address so that `urls` prints links you can
+open from your browser. This works for every orchestrator.
+
+**Tools on the VM, mvn on your machine** (the `maven` orchestrator). Point
+Docker at the VM, either with `DOCKER_HOST` or a docker context, and run
+everything from your machine:
+
+```bash
+export DOCKER_HOST=ssh://user@build-vm      # or: docker context create build-vm --docker host=ssh://user@build-vm && docker context use build-vm
+../mvn-devops/devops.sh doctor              # docker daemon reachable on build-vm
+../mvn-devops/devops.sh setup               # containers start on the VM
+../mvn-devops/devops.sh run                 # mvn runs here and talks to build-vm:<port>
+```
+
+`secrets` takes the default for `DEVOPS_HOST` from `DOCKER_HOST` or the docker
+context, and every URL handed to mvn and every `configure` call uses it. The
+ports of the VM must be reachable from your machine (firewall, security
+group). Concourse can be driven from your machine the same way. Jenkins mounts
+its configuration from `.devops/`, which a remote Docker daemon cannot see, so
+run `devops.sh` on the VM for Jenkins.
+
+Change the address later with `devops.sh secrets --reconfigure`.
 
 ## Testing
 

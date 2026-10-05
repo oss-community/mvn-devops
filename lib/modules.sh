@@ -2,7 +2,8 @@
 # Module discovery and hook execution.
 #
 # A module is a directory  modules/<category>/<name>/  containing:
-#   module.conf   MODULE_TITLE, MODULE_DESCRIPTION, MODULE_REQUIRES, MODULE_RUNS_IN
+#   module.conf   MODULE_TITLE, MODULE_DESCRIPTION, MODULE_REQUIRES, MODULE_RUNS_IN,
+#                 MODULE_SERVER
 #   module.sh     optional hook functions (see docs/module-guide.md)
 #   compose.yml   optional docker compose fragment
 #
@@ -126,10 +127,14 @@ modules_hook() {
   done
 }
 
-# Selected modules that ship a compose fragment.
+# Selected modules that ship a compose fragment, except those using an
+# existing server (MODULE_SERVER prefix with a <PREFIX>_SERVER_URL).
 compose_files() {
-  local id
+  local id server
   for id in $MODULES; do
-    [[ -f "$(module_dir "$id")/compose.yml" ]] && printf '%s\n' "$(module_dir "$id")/compose.yml"
+    [[ -f "$(module_dir "$id")/compose.yml" ]] || continue
+    server=$(module_field "$id" MODULE_SERVER)
+    [[ -n $server ]] && server_external "$server" && continue
+    printf '%s\n' "$(module_dir "$id")/compose.yml"
   done
 }

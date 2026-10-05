@@ -1,25 +1,66 @@
 # shellcheck shell=bash
 # Nexus 3: replaces the generated admin password and accepts the community
-# EULA.  The default maven-releases and maven-snapshots repositories are used.
+# EULA.  With an existing server (NEXUS_SERVER_URL) it only checks the
+# credentials you give it.  maven-releases and maven-snapshots are the default
+# repositories.
 
 module_secrets() {
-  ask NEXUS_HOST_PORT "Nexus port on this machine" 8084
-  ask_secret NEXUS_ADMIN_PASSWORD "New Nexus admin password" "$(random_password)"
-  log_dim "  Nexus Community Edition accepts uploads only after you accept its EULA:"
-  log_dim "  https://links.sonatype.com/products/nxrm/ce-eula"
-  ask NEXUS_ACCEPT_EULA "Accept the Nexus Community Edition EULA? yes/no" no
+  ask_server NEXUS Nexus https://nexus.example.com
+  if server_external NEXUS; then
+    ask NEXUS_USERNAME "Nexus user that may deploy" admin
+    ask_secret NEXUS_PASSWORD "Password of $(value NEXUS_USERNAME)"
+  else
+    ask NEXUS_HOST_PORT "Nexus port on the Docker machine" 8084
+    ask_secret NEXUS_ADMIN_PASSWORD "New Nexus admin password" "$(random_password)"
+    log_dim "  Nexus Community Edition accepts uploads only after you accept its EULA:"
+    log_dim "  https://links.sonatype.com/products/nxrm/ce-eula"
+    ask NEXUS_ACCEPT_EULA "Accept the Nexus Community Edition EULA? yes/no" no
+  fi
+  ask NEXUS_SNAPSHOT_REPOSITORY "Nexus snapshot repository" maven-snapshots
+  ask NEXUS_RELEASE_REPOSITORY "Nexus release repository" maven-releases
+}
+
+nexus_url() { server_url NEXUS "$(value NEXUS_HOST_PORT 8084)"; }
+
+nexus_user() {
+  if server_external NEXUS; then value NEXUS_USERNAME admin; else printf 'admin'; fi
+}
+
+nexus_password() {
+  if server_external NEXUS; then value NEXUS_PASSWORD; else value NEXUS_ADMIN_PASSWORD; fi
 }
 
 nexus_api() {
   local auth=$1 method=$2 path=$3; shift 3
-  curl -s -u "$auth" -X "$method" "$(host_url "$(value NEXUS_HOST_PORT)")/service/rest$path" "$@"
+  curl -s -u "$auth" -X "$method" "$(nexus_url)/service/rest$path" "$@"
+}
+
+configure_existing() {
+  local auth repo status repos
+  auth="$(nexus_user):$(nexus_password)"
+  repos=$(mktemp)
+  status=$(nexus_api "$auth" GET /v1/repositories -o "$repos" -w '%{http_code}')
+  [[ $status == 401 ]] && { rm -f "$repos"; die "$(nexus_url) rejects $(nexus_user) with NEXUS_PASSWORD. Fix it with '$DEVOPS_CMD secrets --reconfigure'."; }
+  log_ok "Logged in to $(nexus_url) as $(nexus_user)"
+  for repo in "$(value NEXUS_SNAPSHOT_REPOSITORY maven-snapshots)" "$(value NEXUS_RELEASE_REPOSITORY maven-releases)"; do
+    if jq -e --arg r "$repo" 'any(.[]; .name == $r)' "$repos" > /dev/null 2>&1; then
+      log_ok "Repository $repo exists"
+    else
+      log_warn "Repository $repo was not found on $(nexus_url) (or $(nexus_user) cannot see it)."
+    fi
+  done
+  rm -f "$repos"
 }
 
 module_configure() {
   local password initial status eula
+  wait_http "$(nexus_url)/service/rest/v1/status" 600 '^200$' \
+    || die "Nexus at $(nexus_url) is not up. Check '$DEVOPS_CMD logs nexus' or the server."
+  if server_external NEXUS; then
+    configure_existing
+    return
+  fi
   password=$(require_value NEXUS_ADMIN_PASSWORD)
-  wait_http "$(host_url "$(value NEXUS_HOST_PORT)")/service/rest/v1/status" 600 '^200$' \
-    || die "Nexus did not start. Check '$DEVOPS_CMD logs nexus'."
 
   initial=$(compose exec -T nexus cat /nexus-data/admin.password 2>/dev/null || true)
   if [[ -n $initial ]]; then
@@ -50,12 +91,12 @@ module_configure() {
 
 module_env() {
   local base
-  base=$(pipeline_url nexus 8081 "$(value NEXUS_HOST_PORT 8084)")
-  pipeline_var NEXUS_ARTIFACTORY_USERNAME admin
-  pipeline_secret NEXUS_ARTIFACTORY_PASSWORD "$(value NEXUS_ADMIN_PASSWORD)"
+  base=$(server_pipeline_url NEXUS nexus 8081 "$(value NEXUS_HOST_PORT 8084)")
+  pipeline_var NEXUS_ARTIFACTORY_USERNAME "$(nexus_user)"
+  pipeline_secret NEXUS_ARTIFACTORY_PASSWORD "$(nexus_password)"
   pipeline_var NEXUS_ARTIFACTORY_HOST_URL "$base"
-  pipeline_var NEXUS_ARTIFACTORY_SNAPSHOT_URL "$base/repository/maven-snapshots/"
-  pipeline_var NEXUS_ARTIFACTORY_RELEASE_URL "$base/repository/maven-releases/"
+  pipeline_var NEXUS_ARTIFACTORY_SNAPSHOT_URL "$base/repository/$(value NEXUS_SNAPSHOT_REPOSITORY maven-snapshots)/"
+  pipeline_var NEXUS_ARTIFACTORY_RELEASE_URL "$base/repository/$(value NEXUS_RELEASE_REPOSITORY maven-releases)/"
 }
 
 module_stages() {
@@ -63,5 +104,9 @@ module_stages() {
 }
 
 module_urls() {
-  printf '  %-12s %s   (admin / devops.sh get NEXUS_ADMIN_PASSWORD)\n' Nexus "$(host_url "$(value NEXUS_HOST_PORT 8084)")"
+  if server_external NEXUS; then
+    printf '  %-12s %s   (%s)\n' Nexus "$(nexus_url)" "$(nexus_user)"
+  else
+    printf '  %-12s %s   (admin / devops.sh get NEXUS_ADMIN_PASSWORD)\n' Nexus "$(nexus_url)"
+  fi
 }

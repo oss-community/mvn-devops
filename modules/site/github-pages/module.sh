@@ -4,17 +4,11 @@
 # otherwise the site plugin's default project information pages are built.
 #
 # Publishing pushes over SSH.  When the pipeline runs on this machine your own
-# SSH key is used.  When it runs in a container (Jenkins, Concourse) a deploy
+# SSH key is used.  When Jenkins or Concourse runs it, a deploy
 # key is generated in .devops/keys and registered on the repository.
 
 module_secrets() {
   ask SITE_BRANCH "Branch GitHub Pages serves" "site"
-}
-
-github_api() {
-  local method=$1 path=$2; shift 2
-  curl -s -X "$method" -H "Authorization: Bearer $(value GITHUB_TOKEN)" \
-    -H 'Accept: application/vnd.github+json' "https://api.github.com$path" "$@"
 }
 
 module_configure() {
@@ -28,7 +22,7 @@ module_configure() {
     log_warn "and select it under Settings > Pages."
   fi
 
-  [[ ${DEVOPS_RUNS_IN:-host} == docker ]] || return 0
+  [[ ${DEVOPS_RUNS_IN:-host} != host ]] || return 0
   key="$DEVOPS_KEYS/github_deploy"
   if [[ ! -f $key ]]; then
     ssh-keygen -q -t ed25519 -N '' -C "mvn-devops $PROJECT_NAME" -f "$key"
@@ -46,7 +40,7 @@ module_configure() {
 # Containers get the deploy key as one base64 line; the pipeline writes it to ~/.ssh.
 module_env() {
   local key="$DEVOPS_KEYS/github_deploy"
-  [[ ${DEVOPS_RUNS_IN:-host} == docker && -f $key ]] || return 0
+  [[ ${DEVOPS_RUNS_IN:-host} != host && -f $key ]] || return 0
   pipeline_secret GITHUB_DEPLOY_KEY_B64 "$(base64 < "$key" | tr -d '\n')"
 }
 
@@ -56,7 +50,7 @@ module_env() {
 STAGE_SITE='rm -rf target/staging && mkdir -p target/staging && cp -R target/site/. target/staging/ && for d in */target/site; do if [ -d "$d" ]; then m=$(dirname "$(dirname "$d")"); mkdir -p "target/staging/$m"; cp -R "$d/." "target/staging/$m/"; fi; done'
 
 module_stages() {
-  local scm='scm:git:git@github.com:$GITHUB_REPOSITORY.git'
+  local scm='scm:git:git@$GITHUB_HOST:$GITHUB_REPOSITORY.git'
   stage 60 cd site "$(mvn_site site)"
   shell_stage 62 cd stage-site "$STAGE_SITE"
   # -N: the staged site is published once, from the root.
@@ -66,5 +60,9 @@ module_stages() {
 module_urls() {
   local repo
   repo=$(value GITHUB_REPOSITORY)
-  printf '  %-12s https://%s.github.io/%s\n' Site "${repo%%/*}" "${repo#*/}"
+  if [[ $(github_host) == github.com ]]; then
+    printf '  %-12s https://%s.github.io/%s\n' Site "${repo%%/*}" "${repo#*/}"
+  else
+    printf '  %-12s %s/%s/settings/pages\n' Site "$(github_url)" "$repo"
+  fi
 }

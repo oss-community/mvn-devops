@@ -65,6 +65,15 @@ modules/artifact/nexus/
 
 برای همین stage ها هر plugin رو مستقیم با مختصات کاملش صدا می‌زنن و تنظیماتش رو با `-D` می‌دن. مثلاً `maven-deploy-plugin:3.1.3:deploy -DaltSnapshotDeploymentRepository=nexus-snapshots::<url>`. اطلاعات ورود هم از `templates/settings.xml` خود فریمورک میاد که با `-gs` (global settings) پاس داده می‌شه. نتیجه اینکه developer به pom پروژه‌اش هیچ پروفایل، `distributionManagement` یا settings اضافه نمی‌کنه. اگه پروژه پروفایل یا settings خودش رو داشته باشه، از طریق مقادیر `MAVEN_PROFILES` و `MAVEN_SETTINGS` هنوز می‌شه ازشون استفاده کرد.
 
+## ابزارها لزوماً روی localhost نیستن
+
+هر ابزاری که سرور داره (SonarQube، Nexus، Artifactory، Jenkins، Concourse) دو حالت داره:
+
+- **در Docker:** خود devops.sh بالاش میاره، یا روی همین سیستم یا روی ماشینی که `DOCKER_HOST` بهش اشاره می‌کنه. آدرسش از `DEVOPS_HOST` میاد.
+- **سرور موجود:** هر جایی با URL خودش. در `secrets` مقدار `<TOOL>_SERVER_URL` و اطلاعات ورود پرسیده می‌شه، container ای براش ساخته نمی‌شه، و `configure` فقط اطلاعات ورود و repository ها رو چک می‌کنه.
+
+هر ابزار جدا تصمیم گرفته می‌شه، پس هر ترکیبی ممکنه. GitHub Enterprise هم با `GITHUB_URL` پشتیبانی می‌شه. برای Jenkins موجود، `publish` job و credential ها رو با REST API می‌سازه یا به‌روز می‌کنه. برای Concourse موجود، pipeline در team خودت ست می‌شه.
+
 ## چرخه‌ی کار
 
 ```

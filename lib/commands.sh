@@ -5,6 +5,9 @@ load_project() {
   profile_load
   DEVOPS_RUNS_IN=$(module_field "orchestrator/$ORCHESTRATOR" MODULE_RUNS_IN)
   DEVOPS_RUNS_IN=${DEVOPS_RUNS_IN:-host}
+  local server
+  server=$(module_field "orchestrator/$ORCHESTRATOR" MODULE_SERVER)
+  if [[ -n $server ]] && server_external "$server"; then DEVOPS_RUNS_IN=remote; fi
   export DEVOPS_RUNS_IN
 }
 
@@ -136,7 +139,7 @@ cmd_secrets() {
   load_project
   state_ensure_dirs
   log_step "Docker machine"
-  ask DEVOPS_HOST "Address of the machine Docker runs on, as reached from here" "$(docker_host_default)"
+  ask DEVOPS_HOST "Address of the machine Docker runs on, for the tools started in Docker" "$(docker_host_default)"
   modules_hook module_secrets
   env_generate
   log_ok "Values stored in $DEVOPS_VALUES"
@@ -147,7 +150,7 @@ cmd_up() {
   env_generate
   modules_hook module_prepare
   env_generate
-  if [[ " ${MODULES//$'\n'/ } " == *" orchestrator/jenkins "* && $(docker_host_default) != localhost ]]; then
+  if compose_files | grep -q /orchestrator/jenkins/ && [[ $(docker_host_default) != localhost ]]; then
     log_warn "Jenkins mounts files from $DEVOPS_STATE, which a Docker daemon on another machine cannot see. Run devops.sh on the Docker machine instead."
   fi
   log_step "Starting containers"
@@ -216,6 +219,10 @@ cmd_render() {
 cmd_publish() {
   load_project
   env_generate
+  if [[ $DEVOPS_RUNS_IN == remote && $(devops_host) == localhost && -n $(compose_files) ]]; then
+    log_warn "The CI server reaches the tools started in Docker at localhost. Set DEVOPS_HOST to an"
+    log_warn "address it can reach with '$DEVOPS_CMD secrets --reconfigure'."
+  fi
   module_hook "$(orchestrator_id)" module_render
   module_hook "$(orchestrator_id)" module_configure
   module_hook "$(orchestrator_id)" module_publish

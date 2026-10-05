@@ -47,4 +47,31 @@ for orchestrator in maven jenkins concourse; do
   fi
   printf 'ok  %s\n' "$orchestrator"
 done
+# Every tool on an existing server, GitHub Enterprise: no containers at all.
+rm -rf "$project/.devops"
+devops init --orchestrator jenkins --with sonarqube,nexus,jfrog,github-packages,github-pages > /dev/null
+values="$project/.devops/values"
+mkdir -p "$values"
+printf '%s' https://ghe.acme.test > "$values/GITHUB_URL"
+printf '%s' https://sonar.acme.test/ > "$values/SONAR_SERVER_URL"
+printf '%s' https://nexus.acme.test > "$values/NEXUS_SERVER_URL"
+printf '%s' https://acme.jfrog.test/artifactory > "$values/JFROG_SERVER_URL"
+printf '%s' https://jenkins.acme.test > "$values/JENKINS_SERVER_URL"
+devops secrets > /dev/null
+devops render > /dev/null
+env_out=$(devops env --show)
+for expected in SONAR_URL=https://sonar.acme.test \
+    NEXUS_ARTIFACTORY_SNAPSHOT_URL=https://nexus.acme.test/repository/maven-snapshots/ \
+    JFROG_ARTIFACTORY_RELEASE_URL=https://acme.jfrog.test/artifactory/demo-libs-release-local/ \
+    GITHUB_PACKAGES_URL=https://maven.ghe.acme.test/example/demo-app \
+    GITHUB_HOST=ghe.acme.test; do
+  grep -qx "$expected" <<< "$env_out" || fail "existing servers: $expected missing"
+done
+jenkinsfile="$project/.devops/generated/Jenkinsfile"
+grep -q "SONAR_TOKEN = credentials('demo-app-SONAR_TOKEN')" "$jenkinsfile" || fail "existing jenkins: credential id"
+grep -q "SONAR_URL = 'https://sonar.acme.test'" "$jenkinsfile" || fail "existing jenkins: plain variables"
+grep -q "credentialsId: 'demo-app-github-https'" "$jenkinsfile" || fail "existing jenkins: checkout credential"
+devops compose config --services 2>&1 | grep -q "No selected module needs containers" || fail "existing servers: no container expected"
+printf 'ok  existing servers\n'
+
 printf 'All smoke tests passed\n'

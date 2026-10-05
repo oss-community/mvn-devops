@@ -12,7 +12,12 @@ MODULE_TITLE="Nexus Repository"
 MODULE_DESCRIPTION="Sonatype Nexus 3 for Maven releases and snapshots"   # shown in the menu
 MODULE_REQUIRES="scm/github"     # other modules that must be selected too (optional)
 MODULE_RUNS_IN=docker            # orchestrators only: host or docker
+MODULE_SERVER=NEXUS              # tools with a server: prefix of <PREFIX>_SERVER_URL (optional)
 ```
+
+With `MODULE_SERVER`, the tool can also be an existing server: when
+`<PREFIX>_SERVER_URL` has a value, the module's `compose.yml` is left out and
+the hooks talk to that URL instead.
 
 ### `compose.yml` (optional)
 
@@ -60,8 +65,13 @@ stage ORDER PHASE NAME "MAVEN ARGS"   # PHASE is ci or cd; args may use $VARS
 shell_stage ORDER PHASE NAME "CMD"    # a POSIX shell command in the project root instead of mvn
 mvn_plugin KEY group:artifact VERSION GOAL   # full plugin coordinates, version overridable per project
 mvn_deploy_args SNAP_ID SNAP_URL REL_ID REL_URL   # package + attach + deploy without distributionManagement
+ask_server PREFIX "Title" [example]   # ask <PREFIX>_SERVER_URL; empty means Docker
+server_external PREFIX                # true when an existing server is used
+server_url PREFIX HOST_PORT [PATH]    # URL for configure hooks: the server, or DEVOPS_HOST:port
+server_pipeline_url PREFIX SERVICE PORT HOST_PORT [PATH]   # URL for the pipeline
 pipeline_url SERVICE PORT HOST_PORT [PATH]   # service name or DEVOPS_HOST, depending on the orchestrator
-host_url HOST_PORT [PATH]             # DEVOPS_HOST URL for configure hooks
+host_url HOST_PORT [PATH]             # DEVOPS_HOST URL
+github_url / github_host / github_api # github.com or GitHub Enterprise
 
 compose ...                           # docker compose of the project, e.g. compose exec -T nexus ...
 wait_http URL [timeout] [status regex]
@@ -86,13 +96,15 @@ modules/artifact/reposilite/
 
 ```bash
 # module.sh
+# module.conf has MODULE_SERVER=REPOSILITE
 module_secrets() {
-  ask REPOSILITE_HOST_PORT "Reposilite port on this machine" 8085
+  ask_server REPOSILITE Reposilite https://repo.example.com
+  server_external REPOSILITE || ask REPOSILITE_HOST_PORT "Reposilite port on the Docker machine" 8085
   ask_secret REPOSILITE_TOKEN "Reposilite deploy token" "$(random_password)"
 }
 
 module_env() {
-  pipeline_var REPOSILITE_URL "$(pipeline_url reposilite 8080 "$(value REPOSILITE_HOST_PORT)")/snapshots"
+  pipeline_var REPOSILITE_URL "$(server_pipeline_url REPOSILITE reposilite 8080 "$(value REPOSILITE_HOST_PORT 8085)")/snapshots"
   pipeline_secret REPOSILITE_TOKEN "$(value REPOSILITE_TOKEN)"
 }
 

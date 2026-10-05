@@ -5,28 +5,54 @@
 #         the admin user, one secret-text credential per secret pipeline
 #         variable and a pipeline job whose script is the Jenkinsfile.
 # publish recreates the Jenkins container so it reloads env and casc.yaml.
+#         With an existing server (JENKINS_SERVER_URL) it creates or updates
+#         the credentials and the job through the REST API instead.
 # run     triggers the job and streams its console.
 
 job_name() { printf '%s' "$PROJECT_NAME"; }
 
+# A shared server holds credentials of many projects, so ids get a prefix there.
+credential_id() {
+  if server_external JENKINS; then printf '%s-%s' "$PROJECT_NAME" "$1"; else printf '%s' "$1"; fi
+}
+
 module_secrets() {
-  ask JENKINS_HOST_PORT "Jenkins port on this machine" 8080
+  ask_server JENKINS Jenkins https://jenkins.example.com
+  if server_external JENKINS; then
+    log_dim "  Agents need git, ssh, Java 17 and Maven; the server needs the plugins workflow-aggregator,"
+    log_dim "  git, credentials-binding, plain-credentials and timestamper."
+    ask JENKINS_ADMIN_USER "Jenkins user that may create jobs and credentials" admin
+    ask_secret JENKINS_API_TOKEN "API token of $(value JENKINS_ADMIN_USER) (user menu > Security > API Token)"
+    return
+  fi
+  ask JENKINS_HOST_PORT "Jenkins port on the Docker machine" 8080
   ask JENKINS_ADMIN_USER "Jenkins admin user" admin
   ask_secret JENKINS_ADMIN_PASSWORD "Jenkins admin password" "$(random_password)"
 }
 
+groovy_escape() { local v=${1//\\/\\\\}; printf '%s' "${v//\'/\\\'}"; }
+xml_escape() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
+
 render_jenkinsfile() {
-  local name args flags key
+  local name args flags key line
   flags=$(maven_flags "" "$CI_SETTINGS")
   printf 'pipeline {\n  agent any\n'
   printf '  options {\n    timestamps()\n    disableConcurrentBuilds()\n  }\n'
   printf '  environment {\n'
   while IFS= read -r key; do
-    printf "    %s = credentials('%s')\n" "$key" "$key"
+    printf "    %s = credentials('%s')\n" "$key" "$(credential_id "$key")"
   done < <(pipeline_secret_keys)
+  # Jenkins in Docker gets the plain variables from env/pipeline.env.
+  if server_external JENKINS; then
+    while IFS= read -r line; do
+      key=${line%%=*}
+      is_secret "$key" && continue
+      printf "    %s = '%s'\n" "$key" "$(groovy_escape "${line#*=}")"
+    done < "$DEVOPS_ENV/pipeline.env"
+  fi
   printf '  }\n  stages {\n'
   printf "    stage('checkout') {\n      steps {\n"
-  printf "        git url: 'https://github.com/' + env.GITHUB_REPOSITORY + '.git', branch: env.GIT_BRANCH, credentialsId: 'github-https'\n"
+  printf "        git url: env.GITHUB_URL + '/' + env.GITHUB_REPOSITORY + '.git', branch: env.GIT_BRANCH, credentialsId: '%s'\n" "$(credential_id github-https)"
   printf "        sh '%s'\n      }\n    }\n" "$(pipeline_ci_setup)"
   while IFS='|' read -r _ _ name args; do
     printf "    stage('%s') {\n      steps {\n        sh '%s'\n      }\n    }\n" "$name" "$(stage_command "$flags" "$args")"
@@ -106,13 +132,17 @@ module_prepare() {
   module_render
 }
 
-jenkins_url() { host_url "$(value JENKINS_HOST_PORT 8080)"; }
+jenkins_url() { server_url JENKINS "$(value JENKINS_HOST_PORT 8080)"; }
 
 # jenkins_api <method> <path> [curl args]: authenticated call with a crumb.
 jenkins_api() {
   local method=$1 path=$2; shift 2
   local auth jar crumb
-  auth="$(value JENKINS_ADMIN_USER admin):$(value JENKINS_ADMIN_PASSWORD)"
+  if server_external JENKINS; then
+    auth="$(value JENKINS_ADMIN_USER admin):$(value JENKINS_API_TOKEN)"
+  else
+    auth="$(value JENKINS_ADMIN_USER admin):$(value JENKINS_ADMIN_PASSWORD)"
+  fi
   jar=$(mktemp)
   crumb=$(curl -s -c "$jar" -u "$auth" "$(jenkins_url)/crumbIssuer/api/json" | jq -r '.crumbRequestField + ":" + .crumb' 2>/dev/null || true)
   curl -s -b "$jar" -u "$auth" -H "$crumb" -X "$method" "$(jenkins_url)$path" "$@"
@@ -120,10 +150,83 @@ jenkins_api() {
 }
 
 module_configure() {
+  local status
+  if server_external JENKINS; then
+    wait_http "$(jenkins_url)/login" 60 || die "Jenkins at $(jenkins_url) does not answer."
+    status=$(jenkins_api GET /api/json -o /dev/null -w '%{http_code}')
+    [[ $status == 200 ]] || die "$(jenkins_url) rejects $(value JENKINS_ADMIN_USER admin) with JENKINS_API_TOKEN (HTTP $status)."
+    log_ok "Logged in to $(jenkins_url) as $(value JENKINS_ADMIN_USER admin)"
+    return
+  fi
   wait_http "$(jenkins_url)/login" 600 '^200$' || die "Jenkins did not start. Check '$DEVOPS_CMD logs jenkins'."
 }
 
+# ---------------------------------------------------------------- existing server
+
+credential_xml() {
+  local kind=$1 id=$2 user=$3 secret=$4
+  if [[ $kind == string ]]; then
+    printf '<org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>\n'
+    printf '  <scope>GLOBAL</scope><id>%s</id><description>mvn-devops %s</description>\n' "$id" "$PROJECT_NAME"
+    printf '  <secret>%s</secret>\n' "$(printf '%s' "$secret" | xml_escape)"
+    printf '</org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>\n'
+  else
+    printf '<com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>\n'
+    printf '  <scope>GLOBAL</scope><id>%s</id><description>mvn-devops %s</description>\n' "$id" "$PROJECT_NAME"
+    printf '  <username>%s</username>\n' "$(printf '%s' "$user" | xml_escape)"
+    printf '  <password>%s</password>\n' "$(printf '%s' "$secret" | xml_escape)"
+    printf '</com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl>\n'
+  fi
+}
+
+# put_credential <string|userpass> <id> <user> <secret>: update, or create.
+put_credential() {
+  local store=/credentials/store/system/domain/_ status
+  status=$(credential_xml "$@" | jenkins_api POST "$store/credential/$2/config.xml" \
+    -H 'Content-Type: application/xml' --data-binary @- -o /dev/null -w '%{http_code}')
+  if [[ $status == 404 ]]; then
+    status=$(credential_xml "$@" | jenkins_api POST "$store/createCredentials" \
+      -H 'Content-Type: application/xml' --data-binary @- -o /dev/null -w '%{http_code}')
+  fi
+  [[ $status == 200 ]] || die "Could not store credential $2 on $(jenkins_url) (HTTP $status)."
+}
+
+job_xml() {
+  printf "<?xml version='1.1' encoding='UTF-8'?>\n<flow-definition>\n"
+  printf '  <description>Generated by mvn-devops</description>\n'
+  printf '  <keepDependencies>false</keepDependencies>\n  <properties/>\n'
+  printf '  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition">\n'
+  printf '    <script>%s</script>\n' "$(xml_escape < "$DEVOPS_GENERATED/Jenkinsfile")"
+  printf '    <sandbox>true</sandbox>\n  </definition>\n  <disabled>false</disabled>\n</flow-definition>\n'
+}
+
+publish_existing() {
+  local key line status
+  log_step "Jenkins: credentials"
+  put_credential userpass "$(credential_id github-https)" "$(value GITHUB_USERNAME)" "$(value GITHUB_TOKEN)"
+  while IFS= read -r line; do
+    key=${line%%=*}
+    is_secret "$key" || continue
+    put_credential string "$(credential_id "$key")" "" "${line#*=}"
+  done < "$DEVOPS_ENV/pipeline.env"
+  log_ok "Stored the credentials with the prefix $PROJECT_NAME-"
+
+  log_step "Jenkins: job"
+  status=$(job_xml | jenkins_api POST "/job/$(job_name)/config.xml" \
+    -H 'Content-Type: application/xml' --data-binary @- -o /dev/null -w '%{http_code}')
+  if [[ $status == 404 ]]; then
+    status=$(job_xml | jenkins_api POST "/createItem?name=$(job_name)" \
+      -H 'Content-Type: application/xml' --data-binary @- -o /dev/null -w '%{http_code}')
+  fi
+  [[ $status == 200 ]] || die "Could not create the job $(job_name) on $(jenkins_url) (HTTP $status)."
+}
+
 module_publish() {
+  if server_external JENKINS; then
+    publish_existing
+    log_ok "Job '$(job_name)' is ready at $(jenkins_url)/job/$(job_name)/"
+    return
+  fi
   log_step "Jenkins: reload configuration"
   compose up -d --no-deps --force-recreate jenkins
   module_configure
@@ -165,5 +268,9 @@ module_run() {
 }
 
 module_urls() {
-  printf '  %-12s %s   (%s / devops.sh get JENKINS_ADMIN_PASSWORD)\n' Jenkins "$(jenkins_url)" "$(value JENKINS_ADMIN_USER admin)"
+  if server_external JENKINS; then
+    printf '  %-12s %s   (%s)\n' Jenkins "$(jenkins_url)" "$(value JENKINS_ADMIN_USER admin)"
+  else
+    printf '  %-12s %s   (%s / devops.sh get JENKINS_ADMIN_PASSWORD)\n' Jenkins "$(jenkins_url)" "$(value JENKINS_ADMIN_USER admin)"
+  fi
 }

@@ -232,8 +232,61 @@ docker_host_default() {
 
 devops_host() { value DEVOPS_HOST localhost; }
 
-# Where does the pipeline run?  "host" (plain maven) or "docker" (Jenkins,
-# Concourse).  Pipeline URLs must use container hostnames in the latter case.
+# ---------------------------------------------------------------- GitHub
+
+# GITHUB_URL is https://github.com or a GitHub Enterprise Server.
+github_url() { value GITHUB_URL https://github.com; }
+github_host() { local u; u=$(github_url); u=${u#*://}; printf '%s' "${u%%/*}"; }
+github_api_url() {
+  if [[ $(github_host) == github.com ]]; then printf 'https://api.github.com'; else printf '%s/api/v3' "$(github_url)"; fi
+}
+
+# github_api <method> <path> [curl args]
+github_api() {
+  local method=$1 path=$2; shift 2
+  curl -s -X "$method" -H "Authorization: Bearer $(value GITHUB_TOKEN)" \
+    -H 'Accept: application/vnd.github+json' "$(github_api_url)$path" "$@"
+}
+
+# ---------------------------------------------------------------- servers
+
+# Every tool with a server (SonarQube, Nexus, Jenkins, ...) either runs in
+# Docker, started by devops.sh, or is an existing server somewhere else.
+# <PREFIX>_SERVER_URL holds the URL of an existing server; empty means Docker.
+
+# ask_server <PREFIX> <title> [example]
+ask_server() {
+  local key="${1}_SERVER_URL" url
+  ask "$key" "$2: URL of an existing server${3:+ such as $3} (empty: run it in Docker)" ""
+  url=$(value "$key")
+  [[ $url == */ ]] && set_value "$key" "${url%/}"
+  return 0
+}
+
+server_external() { [[ -n $(value "${1}_SERVER_URL") ]]; }
+
+# server_url <PREFIX> <host port> [path]: URL devops.sh itself uses.
+server_url() {
+  if server_external "$1"; then
+    printf '%s%s' "$(value "${1}_SERVER_URL")" "${3:-}"
+  else
+    host_url "$2" "${3:-}"
+  fi
+}
+
+# server_pipeline_url <PREFIX> <service> <container port> <host port> [path]:
+# URL the pipeline uses.
+server_pipeline_url() {
+  if server_external "$1"; then
+    printf '%s%s' "$(value "${1}_SERVER_URL")" "${5:-}"
+  else
+    pipeline_url "$2" "$3" "$4" "${5:-}"
+  fi
+}
+
+# Where does the pipeline run?  "host" (plain maven), "docker" (Jenkins or
+# Concourse started by devops.sh) or "remote" (an existing Jenkins or Concourse
+# server).  Only in Docker can the pipeline use container hostnames.
 pipeline_url() {
   local service=$1 internal_port=$2 host_port=$3 path=${4:-}
   if [[ ${DEVOPS_RUNS_IN:-host} == docker ]]; then

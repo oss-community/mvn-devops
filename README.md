@@ -214,10 +214,12 @@ Nothing is written to `~/.bashrc` or to system environment variables, and
 secrets are never printed: `env --show` masks them and the orchestrators bind
 them as masked credentials.
 
-URLs handed to the pipeline depend on where it runs: with the `maven`
-orchestrator they point to `localhost:<port>` (or the Docker machine, see [Running on another machine](#running-on-another-machine)), with Jenkins or Concourse to the
-compose service name (`http://sonarqube:9000`), because the build runs inside
-the same Docker network.
+URLs handed to the pipeline depend on where it runs. A tool on an existing
+server is always reached at its own URL. A tool in Docker is reached at
+`DEVOPS_HOST:<port>` by the `maven` orchestrator and by an existing Jenkins or
+Concourse server, and at its compose service name (`http://sonarqube:9000`) by
+Jenkins or Concourse in Docker, which share its network. See
+[Where the tools run](#where-the-tools-run).
 
 ## Orchestrators
 
@@ -236,35 +238,61 @@ The pipeline has a `ci` job, triggered by every push, and a `cd` job that runs
 all stages and is started by hand after `ci` passed. Tasks run in
 `maven:3.9-eclipse-temurin-17`. `fly` is downloaded from the server.
 
-## Running on another machine
+## Where the tools run
 
-The tools can run on a VM or build server instead of your own machine. There
-are two ways to do it.
+No tool has to run on `localhost`. Every tool with a server can be one of:
 
-**Everything on the VM.** Clone mvn-devops and the project on the VM and run
-`devops.sh` there, exactly as on your machine. Answer the `DEVOPS_HOST`
-question in `secrets` with the VM's address so that `urls` prints links you can
-open from your browser. This works for every orchestrator.
+| | How | Asked in `secrets` |
+|---|---|---|
+| started in Docker by devops.sh | on this machine, or on the machine `DOCKER_HOST` points to | `DEVOPS_HOST`: address of the Docker machine |
+| an existing server | anywhere, with its own URL; nothing is started for it | `<TOOL>_SERVER_URL`, plus the credentials |
 
-**Tools on the VM, mvn on your machine** (the `maven` orchestrator). Point
-Docker at the VM, either with `DOCKER_HOST` or a docker context, and run
-everything from your machine:
+Each tool is decided on its own, so any mix works: SonarQube on
+`https://sonar.acme.com`, Nexus in Docker on a VM, Jenkins on
+`https://jenkins.acme.com`, and the repository on GitHub Enterprise.
+
+| Tool | Existing server | What devops.sh asks for it |
+|---|---|---|
+| GitHub | `GITHUB_URL`, e.g. `https://github.acme.com` (detected from `origin`) | token as for github.com |
+| SonarQube | `SONAR_SERVER_URL` | an analysis token (My Account > Security) |
+| Nexus | `NEXUS_SERVER_URL` | a user that may deploy, its password, repository names |
+| Artifactory | `JFROG_SERVER_URL`, ending in `/artifactory` | a user, its password, API key or identity token, repository names |
+| GitHub Packages | `GITHUB_PACKAGES_REGISTRY` (`https://maven.<host>` on Enterprise) | |
+| Jenkins | `JENKINS_SERVER_URL` | a user and its API token |
+| Concourse | `CONCOURSE_SERVER_URL` | team, user and password |
+
+For an existing server, `configure` only checks the credentials and the
+repositories; it does not change passwords or create anything there. For
+Jenkins, `publish` creates or updates the job and its credentials through the
+REST API (credential ids get the prefix `<project>-`, because the server is
+shared). The agents need git, ssh, Java 17 and Maven, and the server the
+plugins workflow-aggregator, git, credentials-binding, plain-credentials and
+timestamper. For Concourse, `publish` downloads `fly` from the server and sets
+the pipeline in your team.
+
+Leave a `*_SERVER_URL` empty to run that tool in Docker. Change your answers
+later with `devops.sh secrets --reconfigure`.
+
+### Tools in Docker on another machine
+
+Clone mvn-devops and the project on the VM and run `devops.sh` there, or point
+Docker at the VM and run everything from your machine:
 
 ```bash
-export DOCKER_HOST=ssh://user@build-vm      # or: docker context create build-vm --docker host=ssh://user@build-vm && docker context use build-vm
+export DOCKER_HOST=ssh://user@build-vm      # or a docker context
 ../mvn-devops/devops.sh doctor              # docker daemon reachable on build-vm
 ../mvn-devops/devops.sh setup               # containers start on the VM
 ../mvn-devops/devops.sh run                 # mvn runs here and talks to build-vm:<port>
 ```
 
 `secrets` takes the default for `DEVOPS_HOST` from `DOCKER_HOST` or the docker
-context, and every URL handed to mvn and every `configure` call uses it. The
-ports of the VM must be reachable from your machine (firewall, security
-group). Concourse can be driven from your machine the same way. Jenkins mounts
-its configuration from `.devops/`, which a remote Docker daemon cannot see, so
-run `devops.sh` on the VM for Jenkins.
+context. The ports must be reachable from where the pipeline runs (firewall,
+security group). Jenkins in Docker mounts its configuration from `.devops/`,
+which a remote Docker daemon cannot see, so run `devops.sh` on the VM for it.
 
-Change the address later with `devops.sh secrets --reconfigure`.
+When an existing Jenkins or Concourse server runs the pipeline and some tools
+run in Docker, set `DEVOPS_HOST` to an address that server can reach;
+`publish` warns when it is `localhost`.
 
 ## Testing
 

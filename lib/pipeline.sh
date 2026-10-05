@@ -95,7 +95,7 @@ pipeline_ci_setup() {
   printf '%s' 'git config --global user.name "$GITHUB_USERNAME"; git config --global user.email "$GITHUB_EMAIL"; '
   printf '%s' 'if [ -n "$GITHUB_DEPLOY_KEY_B64" ]; then mkdir -p ~/.ssh && chmod 700 ~/.ssh; '
   printf '%s' 'echo "$GITHUB_DEPLOY_KEY_B64" | base64 -d > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519; '
-  printf '%s\n' 'ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null; fi'
+  printf '%s\n' 'ssh-keyscan "$GITHUB_HOST" >> ~/.ssh/known_hosts 2>/dev/null; fi'
 }
 
 # Pipeline variables that are secrets (masked by the orchestrators).

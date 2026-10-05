@@ -2,7 +2,15 @@
 # mvn-devops: pick your DevOps tools, then set up and run a Maven pipeline.
 set -euo pipefail
 
-DEVOPS_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Follow symlinks, e.g. /usr/bin/mvn-devops -> /usr/share/mvn-devops/devops.sh.
+devops_source=${BASH_SOURCE[0]}
+while [[ -L $devops_source ]]; do
+  devops_link=$(readlink "$devops_source")
+  [[ $devops_link == /* ]] || devops_link="$(dirname "$devops_source")/$devops_link"
+  devops_source=$devops_link
+done
+DEVOPS_HOME="$(cd "$(dirname "$devops_source")" && pwd)"
+unset devops_source devops_link
 DEVOPS_CMD="$(basename "$0")"
 export DEVOPS_HOME DEVOPS_CMD
 
@@ -53,6 +61,7 @@ Options
   -p, --project <dir>   Maven project directory (default: current directory)
   -y, --yes             accept defaults for every question
   -h, --help            show this help
+  -v, --version         show the version
 EOF
 }
 
@@ -63,6 +72,7 @@ main() {
       -p|--project) PROJECT_DIR=$2; shift 2 ;;
       -y|--yes) export DEVOPS_DEFAULTS=1; shift ;;
       -h|--help) usage; return ;;
+      -v|--version) cat "$DEVOPS_HOME/VERSION"; return ;;
       -*) die "Unknown option $1" ;;
       *) break ;;
     esac

@@ -1,0 +1,32 @@
+# nfpm configuration for the Linux packages.  packaging/build.sh fills in
+# ${VERSION} and ${STAGE}.
+name: mvn-devops
+arch: all
+platform: linux
+version: ${VERSION}
+section: devel
+maintainer: OSS Community <https://github.com/oss-community>
+description: |
+  Modular DevOps framework for Maven projects. Pick the tools (Jenkins,
+  Concourse, SonarQube, Nexus, Artifactory, GitHub Packages, GitHub Pages),
+  and mvn-devops starts, configures and wires them into a pipeline.
+homepage: https://github.com/oss-community/mvn-devops
+license: Apache-2.0
+depends:
+  - bash
+  - curl
+  - jq
+  - git
+overrides:
+  deb:
+    depends: [bash, curl, jq, git, openssh-client]
+    recommends: [docker-ce | docker.io]
+  rpm:
+    depends: [bash, curl, jq, git, openssh-clients]
+contents:
+  - src: ${STAGE}/
+    dst: /usr/share/mvn-devops
+    type: tree
+  - src: /usr/share/mvn-devops/devops.sh
+    dst: /usr/bin/mvn-devops
+    type: symlink

@@ -42,15 +42,36 @@ own script, and one entry point asks which modules you want.
 
 `./devops.sh doctor` checks all of them.
 
+## Install
+
+Install it once per machine, not inside a project. Every release on the
+[releases page](https://github.com/oss-community/mvn-devops/releases) has:
+
+| File | For |
+|---|---|
+| `mvn-devops_<version>_all.deb` | Debian, Ubuntu: `sudo apt install ./mvn-devops_<version>_all.deb` |
+| `mvn-devops-<version>-1.noarch.rpm` | Fedora, RHEL, Rocky: `sudo dnf install ./mvn-devops-<version>-1.noarch.rpm` |
+| `mvn-devops-<version>.zip` | Windows: unzip, add the folder to `PATH`, run `devops.bat` (needs Git for Windows) |
+| `mvn-devops-<version>.tar.gz` | macOS or any Linux: unpack and add the folder to `PATH` |
+| `SHA256SUMS` | checksums of the files above |
+
+The Linux packages install into `/usr/share/mvn-devops` and add the command
+`mvn-devops`. With the zip or tar.gz the command is `devops.bat` or
+`devops.sh` in the unpacked folder. A `git clone` of this repository works
+the same way. `mvn-devops --version` prints the installed version.
+
 ## Quick start
 
 ```bash
-git clone https://github.com/oss-community/mvn-devops.git
 cd my-maven-project
-../mvn-devops/devops.sh setup      # menu, questions, containers, tokens, pipeline
-../mvn-devops/devops.sh run        # run the pipeline
-../mvn-devops/devops.sh urls       # web consoles and how to log in
+mvn-devops setup      # menu, questions, containers, tokens, pipeline
+mvn-devops run        # run the pipeline
+mvn-devops urls       # web consoles and how to log in
 ```
+
+or from anywhere with `mvn-devops -p ~/work/my-maven-project setup`. The only
+thing written into the project is the `.devops/` folder, which keeps itself out
+of git.
 
 `setup` is the five steps below in order; each can also be run on its own.
 
@@ -312,6 +333,20 @@ which a remote Docker daemon cannot see, so run `devops.sh` on the VM for it.
 When an existing Jenkins or Concourse server runs the pipeline and some tools
 run in Docker, set `DEVOPS_HOST` to an address that server can reach;
 `publish` warns when it is `localhost`.
+
+## Releasing
+
+Set the version in `VERSION`, commit, and push a tag:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The release workflow runs the checks, builds the files with
+`packaging/build.sh` (zip, tar.gz, and deb and rpm with
+[nfpm](https://nfpm.goreleaser.com)), installs the deb as a check and publishes
+everything as a GitHub release. `packaging/build.sh` also works locally and
+writes to `dist/`.
 
 ## Testing
 

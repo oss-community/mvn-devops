@@ -78,6 +78,16 @@ modules/artifact/nexus/
 
 هر ابزار جدا تصمیم گرفته می‌شه، پس هر ترکیبی ممکنه. GitHub Enterprise هم با `GITHUB_URL` پشتیبانی می‌شه. برای Jenkins موجود، `publish` job و credential ها رو با REST API می‌سازه یا به‌روز می‌کنه. برای Concourse موجود، pipeline در team خودت ست می‌شه.
 
+## نصب و انتشار
+
+هر بار که یه tag مثل `v0.1.0` push بشه، workflow ِ `release` چک‌ها رو اجرا می‌کنه، بسته‌ها رو با `packaging/build.sh` می‌سازه و در GitHub Releases منتشر می‌کنه. بسته‌ها:
+- zip برای ویندوز (با `devops.bat`)
+- tar.gz برای macOS و هر لینوکسی
+- deb برای Debian و Ubuntu
+- rpm برای Fedora و RHEL
+
+بسته‌های لینوکسی فایل‌ها رو در `/usr/share/mvn-devops` نصب می‌کنن و دستور `mvn-devops` رو اضافه می‌کنن.
+
 ## چرخه‌ی کار
 
 ```

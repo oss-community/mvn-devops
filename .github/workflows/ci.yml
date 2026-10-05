@@ -11,6 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck devops.sh lib/*.sh modules/*/*/module.sh tests/*.sh
+        run: shellcheck devops.sh lib/*.sh modules/*/*/module.sh tests/*.sh packaging/*.sh
       - name: smoke test
         run: tests/smoke.sh

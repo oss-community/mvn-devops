@@ -1,28 +1,31 @@
 # shellcheck shell=bash
-# Core Maven stages.  Profiles (source, javadoc, license, checkstyle) must exist
-# in the project's pom.xml; see docs/project-requirements.md.
+# Core Maven stages.  Plugins are called by their coordinates (lib/maven.sh),
+# so the project's pom.xml needs no profiles for them.
 
 module_secrets() {
-  ask MAVEN_SETTINGS "Maven settings file, relative to the project (empty: none)" "settings.xml"
-  ask MAVEN_PACKAGE_PROFILES "Profiles used when packaging (empty: none)" "source,javadoc,license"
-  ask MAVEN_CHECKSTYLE "Run checkstyle (-P checkstyle)? yes/no" "yes"
-  if [[ -n $(value MAVEN_SETTINGS) && ! -f "$PROJECT_DIR/$(value MAVEN_SETTINGS)" ]]; then
-    log_warn "$PROJECT_DIR/$(value MAVEN_SETTINGS) does not exist."
-    if confirm "  Copy the template settings.xml from mvn-devops?" y; then
-      cp "$DEVOPS_HOME/templates/settings.xml" "$PROJECT_DIR/$(value MAVEN_SETTINGS)"
-      log_ok "Copied templates/settings.xml"
-    fi
-  fi
+  ask MAVEN_SETTINGS "Extra settings file of the project, relative to it (empty: none)" ""
+  ask MAVEN_PROFILES "Extra project profiles for every stage (empty: none)" ""
+  ask MAVEN_ATTACH_SOURCES "Attach sources and javadoc jars when deploying? yes/no" yes
+  ask MAVEN_CHECKSTYLE "Run checkstyle? yes/no" yes
+  ask MAVEN_CHECKSTYLE_CONFIG "Checkstyle rules: google_checks.xml, sun_checks.xml or a file in the project" google_checks.xml
+}
+
+checkstyle_config() {
+  local config
+  config=$(value MAVEN_CHECKSTYLE_CONFIG google_checks.xml)
+  case $config in
+    google_checks.xml|sun_checks.xml|http://*|https://*) printf '%s' "$config" ;;
+    # Absolute, so every module of a multi-module build finds it.
+    *) printf '$PWD/%s' "$config" ;;
+  esac
 }
 
 module_stages() {
-  local profiles
-  profiles=$(value MAVEN_PACKAGE_PROFILES)
   stage 10 ci validate "validate"
-  stage 20 ci build "clean package -DskipTests=true${profiles:+ -P $profiles}"
+  stage 20 ci build "clean package -DskipTests=true"
   stage 30 ci test "test"
   if [[ $(value MAVEN_CHECKSTYLE yes) =~ ^[Yy] ]]; then
-    stage 40 ci checkstyle "checkstyle:check -P checkstyle"
+    stage 40 ci checkstyle "$(mvn_checkstyle) -Dcheckstyle.config.location=$(checkstyle_config)"
   fi
   stage 50 ci install "install -DskipTests=true"
 }

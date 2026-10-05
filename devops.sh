@@ -12,6 +12,8 @@ source "$DEVOPS_HOME/lib/log.sh"
 source "$DEVOPS_HOME/lib/state.sh"
 # shellcheck source=lib/modules.sh
 source "$DEVOPS_HOME/lib/modules.sh"
+# shellcheck source=lib/maven.sh
+source "$DEVOPS_HOME/lib/maven.sh"
 # shellcheck source=lib/pipeline.sh
 source "$DEVOPS_HOME/lib/pipeline.sh"
 # shellcheck source=lib/docker.sh

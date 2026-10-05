@@ -1,9 +1,13 @@
 # shellcheck shell=bash
-# GitHub Packages needs no container: the "github" profile of the project
-# deploys to https://maven.pkg.github.com/$GITHUB_ARTIFACTORY_URL.
+# GitHub Packages needs no container: artifacts go to
+# https://maven.pkg.github.com/<owner>/<repo>.
+
+module_env() {
+  pipeline_var GITHUB_PACKAGES_URL "https://maven.pkg.github.com/$(value GITHUB_REPOSITORY)"
+}
 
 module_stages() {
-  stage 71 cd deploy-github "deploy -DskipTests=true -P github"
+  stage 71 cd deploy-github "$(mvn_deploy_args github '$GITHUB_PACKAGES_URL' github '$GITHUB_PACKAGES_URL')"
 }
 
 module_urls() {

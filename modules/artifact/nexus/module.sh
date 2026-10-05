@@ -59,7 +59,7 @@ module_env() {
 }
 
 module_stages() {
-  stage 72 cd deploy-nexus "deploy -DskipTests=true -P nexus"
+  stage 72 cd deploy-nexus "$(mvn_deploy_args nexus-snapshots '$NEXUS_ARTIFACTORY_SNAPSHOT_URL' nexus-releases '$NEXUS_ARTIFACTORY_RELEASE_URL')"
 }
 
 module_urls() {

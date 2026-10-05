@@ -98,25 +98,31 @@ Without questions, for scripts and CI:
 | Artifact repositories | any | `jfrog`, `nexus`, `github-packages` |
 | Project site | any | `github-pages` |
 
-Default stages with every module selected:
+Default stages with every module selected (plugin coordinates shortened):
 
 ```
 ORDER  PHASE STAGE            MAVEN ARGUMENTS
 10     ci   validate         validate
-20     ci   build            clean package -DskipTests=true -P source,javadoc,license
+20     ci   build            clean package -DskipTests=true
 30     ci   test             test
-40     ci   checkstyle       checkstyle:check -P checkstyle
-45     ci   sonar            sonar:sonar -P sonar
+40     ci   checkstyle       maven-checkstyle-plugin:3.6.0:check -Dcheckstyle.config.location=google_checks.xml
+45     ci   sonar            sonar-maven-plugin:4.0.0.4121:sonar -Dsonar.host.url=$SONAR_URL -Dsonar.token=$SONAR_TOKEN
 50     ci   install          install -DskipTests=true
-60     cd   site             site:site site:stage -P site,javadoc,changelog,test-report,github
-65     cd   publish-site     scm-publish:publish-scm -P site,javadoc,changelog,test-report,github -DscmBranch=site
-70     cd   deploy-jfrog     deploy -DskipTests=true -P jfrog
-71     cd   deploy-github    deploy -DskipTests=true -P github
-72     cd   deploy-nexus     deploy -DskipTests=true -P nexus
+60     cd   site             maven-site-plugin:3.21.0:site
+62     cd   stage-site       (shell) copy the root and module sites into target/staging
+65     cd   publish-site     -N maven-scm-publish-plugin:3.3.0:publish-scm -Dscmpublish.pubScmUrl=... -Dscmpublish.scmBranch=site
+70     cd   deploy-jfrog     package source:jar-no-fork javadoc:jar maven-deploy-plugin:3.1.3:deploy -DaltSnapshotDeploymentRepository=jfrog-snapshots::$JFROG_ARTIFACTORY_SNAPSHOT_URL ...
+71     cd   deploy-github    ... -DaltSnapshotDeploymentRepository=github::$GITHUB_PACKAGES_URL ...
+72     cd   deploy-nexus     ... -DaltSnapshotDeploymentRepository=nexus-snapshots::$NEXUS_ARTIFACTORY_SNAPSHOT_URL ...
 ```
 
-Your project must provide the Maven profiles these stages use; see
-[docs/project-requirements.md](docs/project-requirements.md).
+**The project's pom.xml needs no profiles, no distributionManagement and no
+settings file.** Every plugin is called by its coordinates and configured with
+`-D` properties, and credentials come from the framework's own
+[settings.xml](templates/settings.xml), passed as global settings (`-gs`).
+Details and optional knobs (extra profiles, checkstyle rules, plugin versions)
+are in [docs/project-requirements.md](docs/project-requirements.md).
+
 Adding a tool is one directory; see [docs/module-guide.md](docs/module-guide.md).
 
 ## How it fits together

@@ -55,7 +55,7 @@ module_env() {
 }
 
 module_stages() {
-  stage 45 ci sonar "sonar:sonar -P sonar"
+  stage 45 ci sonar "$(mvn_sonar) -Dsonar.host.url=\$SONAR_URL -Dsonar.token=\$SONAR_TOKEN"
 }
 
 module_urls() {

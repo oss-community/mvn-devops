@@ -26,7 +26,7 @@ yaml_quote() { local v=${1//\'/\'\'}; printf "'%s'" "$v"; }
 # render_job <ci|cd>: the ci job runs ci stages, the cd job runs all stages.
 render_job() {
   local job=$1 flags phase name args key image
-  flags="$(maven_flags "") -Dmaven.repo.local=../.m2/repository"
+  flags="$(maven_flags "" "$CI_SETTINGS") -Dmaven.repo.local=../.m2/repository"
   image=$(value MAVEN_IMAGE maven:3.9-eclipse-temurin-17)
 
   printf '  - name: %s\n    plan:\n      - get: source\n' "$job"
@@ -46,10 +46,10 @@ render_job() {
   done < "$DEVOPS_ENV/pipeline.keys"
   printf '          run:\n            dir: source\n            path: sh\n            args:\n              - -ec\n              - |\n'
   printf '                command -v git > /dev/null || { apt-get update -qq && apt-get install -y -qq git openssh-client > /dev/null; }\n'
-  printf '                %s\n' "$(pipeline_git_setup)"
+  printf '                %s\n' "$(pipeline_ci_setup)"
   while IFS='|' read -r _ phase name args; do
     [[ $job == ci && $phase != ci ]] && continue
-    printf '                echo "==> %s"\n                mvn %s %s\n' "$name" "$flags" "$args"
+    printf '                echo "==> %s"\n                %s\n' "$name" "$(stage_command "$flags" "$args")"
   done < <(pipeline_stages)
 }
 

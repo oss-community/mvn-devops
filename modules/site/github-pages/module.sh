@@ -1,12 +1,13 @@
 # shellcheck shell=bash
 # Maven site published with maven-scm-publish-plugin to a GitHub Pages branch.
+# Reports come from the project's <reporting> section when it has one,
+# otherwise the site plugin's default project information pages are built.
 #
 # Publishing pushes over SSH.  When the pipeline runs on this machine your own
 # SSH key is used.  When it runs in a container (Jenkins, Concourse) a deploy
 # key is generated in .devops/keys and registered on the repository.
 
 module_secrets() {
-  ask SITE_PROFILES "Profiles used to build the site" "site,javadoc,changelog,test-report,github"
   ask SITE_BRANCH "Branch GitHub Pages serves" "site"
 }
 
@@ -49,11 +50,17 @@ module_env() {
   pipeline_secret GITHUB_DEPLOY_KEY_B64 "$(base64 < "$key" | tr -d '\n')"
 }
 
+# maven-site-plugin's "stage" goal insists on <distributionManagement><site> in
+# the pom, so the staging directory is assembled with a shell step instead:
+# the root site plus the site of every first-level module in a sub directory.
+STAGE_SITE='rm -rf target/staging && mkdir -p target/staging && cp -R target/site/. target/staging/ && for d in */target/site; do if [ -d "$d" ]; then m=$(dirname "$(dirname "$d")"); mkdir -p "target/staging/$m"; cp -R "$d/." "target/staging/$m/"; fi; done'
+
 module_stages() {
-  local profiles
-  profiles=$(value SITE_PROFILES site,github)
-  stage 60 cd site "site:site site:stage -P $profiles"
-  stage 65 cd publish-site "scm-publish:publish-scm -P $profiles -DscmBranch=$(value SITE_BRANCH site)"
+  local scm='scm:git:git@github.com:$GITHUB_REPOSITORY.git'
+  stage 60 cd site "$(mvn_site site)"
+  shell_stage 62 cd stage-site "$STAGE_SITE"
+  # -N: the staged site is published once, from the root.
+  stage 65 cd publish-site "-N $(mvn_scm_publish) -Dscmpublish.pubScmUrl=$scm -Dscmpublish.scmBranch=$(value SITE_BRANCH site)"
 }
 
 module_urls() {

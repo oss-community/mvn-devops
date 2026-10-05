@@ -76,7 +76,7 @@ module_env() {
 }
 
 module_stages() {
-  stage 70 cd deploy-jfrog "deploy -DskipTests=true -P jfrog"
+  stage 70 cd deploy-jfrog "$(mvn_deploy_args jfrog-snapshots '$JFROG_ARTIFACTORY_SNAPSHOT_URL' jfrog-releases '$JFROG_ARTIFACTORY_RELEASE_URL')"
 }
 
 module_urls() {

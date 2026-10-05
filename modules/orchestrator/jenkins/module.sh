@@ -17,7 +17,7 @@ module_secrets() {
 
 render_jenkinsfile() {
   local name args flags key
-  flags=$(maven_flags "")
+  flags=$(maven_flags "" "$CI_SETTINGS")
   printf 'pipeline {\n  agent any\n'
   printf '  options {\n    timestamps()\n    disableConcurrentBuilds()\n  }\n'
   printf '  environment {\n'
@@ -27,9 +27,9 @@ render_jenkinsfile() {
   printf '  }\n  stages {\n'
   printf "    stage('checkout') {\n      steps {\n"
   printf "        git url: 'https://github.com/' + env.GITHUB_REPOSITORY + '.git', branch: env.GIT_BRANCH, credentialsId: 'github-https'\n"
-  printf "        sh '%s'\n      }\n    }\n" "$(pipeline_git_setup)"
+  printf "        sh '%s'\n      }\n    }\n" "$(pipeline_ci_setup)"
   while IFS='|' read -r _ _ name args; do
-    printf "    stage('%s') {\n      steps {\n        sh 'mvn %s %s'\n      }\n    }\n" "$name" "$flags" "$args"
+    printf "    stage('%s') {\n      steps {\n        sh '%s'\n      }\n    }\n" "$name" "$(stage_command "$flags" "$args")"
   done < <(pipeline_stages)
   printf '  }\n}\n'
 }

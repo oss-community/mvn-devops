@@ -23,7 +23,7 @@ for orchestrator in maven jenkins concourse; do
   devops secrets > /dev/null
   [[ $(devops get GITHUB_REPOSITORY) == example/demo-app ]] || fail "repository not detected"
   stages=$(devops stages)
-  for name in validate build test sonar install site deploy-jfrog deploy-github deploy-nexus; do
+  for name in validate build test checkstyle sonar install site stage-site publish-site deploy-jfrog deploy-github deploy-nexus; do
     grep -q " $name " <<< "$stages" || fail "$orchestrator: stage $name missing"
   done
   devops render > /dev/null

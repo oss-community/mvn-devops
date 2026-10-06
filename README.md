@@ -359,10 +359,10 @@ Every tool runs from its official image, unchanged:
 
 | Tool | Image |
 |---|---|
-| SonarQube | `sonarqube:26.9.0.129388-community` (with `postgres:16`) |
+| SonarQube | `sonarqube:26.9.0.129388-community` (with `postgres:18`) |
 | Nexus | `sonatype/nexus3` |
-| Artifactory OSS | `releases-docker.jfrog.io/jfrog/artifactory-oss` (with `postgres:16`) |
-| Concourse | `concourse/concourse` (with `postgres:16`) |
+| Artifactory OSS | `releases-docker.jfrog.io/jfrog/artifactory-oss` (with `postgres:18`) |
+| Concourse | `concourse/concourse` (with `postgres:18`) |
 | Concourse build tasks | `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>` |
 
 Jenkins is the one exception. The official `jenkins/jenkins` image has Java but
@@ -379,10 +379,7 @@ module, so Jenkins, Concourse and your machine use the same versions.
 Only stable releases are used. SonarQube Community Build has no long-term
 release and a new version each month, so it is pinned (`SONAR_IMAGE_TAG`
 overrides it); the other tools follow their stable `latest` or `lts` tag.
-The tools here are local and disposable: SonarQube does not upgrade an older
-database across major versions, so after changing its version run `destroy`
-and `up` to start it with an empty one. SonarQube also refuses to start when
-the disk holding Docker is more than 90% full.
+SonarQube refuses to start when the disk holding Docker is more than 90% full.
 
 ## The compose file of your tools
 

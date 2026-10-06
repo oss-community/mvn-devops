@@ -1,13 +1,13 @@
 services:
   concourse-db:
-    image: postgres:16
+    image: postgres:18
     restart: unless-stopped
     environment:
       POSTGRES_DB: concourse
       POSTGRES_USER: concourse
       POSTGRES_PASSWORD: ${CONCOURSE_DB_PASSWORD}
     volumes:
-      - concourse-db:/var/lib/postgresql/data
+      - concourse-db:/var/lib/postgresql
 
   concourse:
     image: concourse/concourse:${CONCOURSE_IMAGE_TAG:-latest}

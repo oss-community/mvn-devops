@@ -8,7 +8,7 @@ contribute into a pipeline for the orchestrator you chose: plain `mvn` on your
 machine, Jenkins or Concourse.
 
 ```
-$ ./devops.sh -p ../pine-core-java init
+$ ./devops.sh -p ../my-maven-project init
 
 Pipeline orchestrator (choose one)
   1) concourse        Concourse CI in Docker: a ci job on every push, a manual cd job
@@ -149,8 +149,8 @@ of git.
 Without questions, for scripts and CI:
 
 ```bash
-./devops.sh -y -p ../pine-core-java init --orchestrator jenkins --with sonarqube,nexus,github-pages
-./devops.sh -y -p ../pine-core-java setup
+./devops.sh -y -p ../my-maven-project init --orchestrator jenkins --with sonarqube,nexus,github-pages
+./devops.sh -y -p ../my-maven-project setup
 ```
 
 ## Commands
@@ -245,8 +245,7 @@ Settings > Pages, and under Build and deployment set:
 - Source: Deploy from a branch
 - Branch: `site`, folder `/ (root)`
 
-The site is then served at `https://<owner>.github.io/<repo>/`, for example
-[oss-community.github.io/pine-core-java](https://oss-community.github.io/pine-core-java).
+The site is then served at `https://<owner>.github.io/<repo>/`.
 
 **Publishing.** The site stages run in the `cd` phase, after the ci stages:
 

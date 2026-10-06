@@ -10,7 +10,7 @@ services:
       - sonarqube-db:/var/lib/postgresql/data
 
   sonarqube:
-    image: sonarqube:${SONAR_IMAGE_TAG:-lts-community}
+    image: sonarqube:${SONAR_IMAGE_TAG:-26.9.0.129388-community}
     restart: unless-stopped
     depends_on:
       - sonarqube-db

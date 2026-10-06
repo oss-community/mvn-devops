@@ -63,7 +63,7 @@ modules/artifact/nexus/
 
 فایل `profiles.xml` فقط در Maven 2 وجود داشت و از Maven 3 حذف شد. پروفایل‌های داخل `settings.xml` هم فقط property، repository و شرط فعال‌شدن رو قبول می‌کنن، نه plugin یا `distributionManagement`.
 
-برای همین stage ها هر plugin رو مستقیم با مختصات کاملش صدا می‌زنن و تنظیماتش رو با `-D` می‌دن. مثلاً `maven-deploy-plugin:3.1.3:deploy -DaltSnapshotDeploymentRepository=nexus-snapshots::<url>`. اطلاعات ورود هم از `templates/settings.xml` خود فریمورک میاد که با `-gs` (global settings) پاس داده می‌شه. نتیجه اینکه developer به pom پروژه‌اش هیچ پروفایل، `distributionManagement` یا settings اضافه نمی‌کنه. اگه پروژه پروفایل یا settings خودش رو داشته باشه، از طریق مقادیر `MAVEN_PROFILES` و `MAVEN_SETTINGS` هنوز می‌شه ازشون استفاده کرد.
+برای همین stage ها هر plugin رو مستقیم با مختصات کاملش صدا می‌زنن و تنظیماتش رو با `-D` می‌دن. مثلاً `maven-deploy-plugin:3.2.0:deploy -DaltSnapshotDeploymentRepository=nexus-snapshots::<url>`. اطلاعات ورود هم از `templates/settings.xml` خود فریمورک میاد که با `-gs` (global settings) پاس داده می‌شه. نتیجه اینکه developer به pom پروژه‌اش هیچ پروفایل، `distributionManagement` یا settings اضافه نمی‌کنه. اگه پروژه پروفایل یا settings خودش رو داشته باشه، از طریق مقادیر `MAVEN_PROFILES` و `MAVEN_SETTINGS` هنوز می‌شه ازشون استفاده کرد.
 
 ## فایل docker-compose ابزارها
 

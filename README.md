@@ -210,12 +210,12 @@ ORDER  PHASE STAGE            MAVEN ARGUMENTS
 20     ci   build            clean package -DskipTests=true
 30     ci   test             test
 40     ci   checkstyle       maven-checkstyle-plugin:3.6.0:check -Dcheckstyle.config.location=google_checks.xml
-45     ci   sonar            sonar-maven-plugin:4.0.0.4121:sonar -Dsonar.host.url=$SONAR_URL -Dsonar.token=$SONAR_TOKEN
+45     ci   sonar            sonar-maven-plugin:5.8.0.7211:sonar -Dsonar.host.url=$SONAR_URL -Dsonar.token=$SONAR_TOKEN
 50     ci   install          install -DskipTests=true
-60     cd   site             maven-site-plugin:3.21.0:site
+60     cd   site             maven-site-plugin:3.22.0:site
 62     cd   stage-site       (shell) copy the root and module sites into target/staging
 65     cd   publish-site     -N maven-scm-publish-plugin:3.3.0:publish-scm -Dscmpublish.pubScmUrl=... -Dscmpublish.scmBranch=site
-70     cd   deploy-jfrog     package source:jar-no-fork javadoc:jar maven-deploy-plugin:3.1.3:deploy -DaltSnapshotDeploymentRepository=jfrog-snapshots::$JFROG_ARTIFACTORY_SNAPSHOT_URL ...
+70     cd   deploy-jfrog     package source:jar-no-fork javadoc:jar maven-deploy-plugin:3.2.0:deploy -DaltSnapshotDeploymentRepository=jfrog-snapshots::$JFROG_ARTIFACTORY_SNAPSHOT_URL ...
 71     cd   deploy-github    ... -DaltSnapshotDeploymentRepository=github::$GITHUB_PACKAGES_URL ...
 72     cd   deploy-nexus     ... -DaltSnapshotDeploymentRepository=nexus-snapshots::$NEXUS_ARTIFACTORY_SNAPSHOT_URL ...
 ```
@@ -271,10 +271,10 @@ root. No profiles or settings are needed:
 
 ```bash
 # build the site, including module sites
-mvn -B org.apache.maven.plugins:maven-site-plugin:3.21.0:site
+mvn -B org.apache.maven.plugins:maven-site-plugin:3.22.0:site
 
 # preview it at http://localhost:8000
-mvn org.apache.maven.plugins:maven-site-plugin:3.21.0:run -Dport=8000
+mvn org.apache.maven.plugins:maven-site-plugin:3.22.0:run -Dport=8000
 
 # publish target/staging to the site branch (after ./devops.sh run --only stage-site)
 mvn -B -N org.apache.maven.plugins:maven-scm-publish-plugin:3.3.0:publish-scm \
@@ -359,7 +359,7 @@ Every tool runs from its official image, unchanged:
 
 | Tool | Image |
 |---|---|
-| SonarQube | `sonarqube` (with `postgres:16`) |
+| SonarQube | `sonarqube:26.9.0.129388-community` (with `postgres:16`) |
 | Nexus | `sonatype/nexus3` |
 | Artifactory OSS | `releases-docker.jfrog.io/jfrog/artifactory-oss` (with `postgres:16`) |
 | Concourse | `concourse/concourse` (with `postgres:16`) |
@@ -375,6 +375,14 @@ jq and the plugins in `plugins.txt`. `up` builds it locally; no image is
 published by mvn-devops. Java and Maven versions come from `JAVA_VERSION`
 (default 21) and `MAVEN_VERSION` (default 3.9), asked by the `maven` build
 module, so Jenkins, Concourse and your machine use the same versions.
+
+Only stable releases are used. SonarQube Community Build has no long-term
+release and a new version each month, so it is pinned (`SONAR_IMAGE_TAG`
+overrides it); the other tools follow their stable `latest` or `lts` tag.
+The tools here are local and disposable: SonarQube does not upgrade an older
+database across major versions, so after changing its version run `destroy`
+and `up` to start it with an empty one. SonarQube also refuses to start when
+the disk holding Docker is more than 90% full.
 
 ## The compose file of your tools
 

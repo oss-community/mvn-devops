@@ -332,5 +332,17 @@ cmd_doctor() {
       log_warn "No SSH key accepted by $(github_host); needed only to publish the site from this machine (docs/github-setup.md)"
     fi
   fi
-  if (( ok )); then log_ok "All good"; else log_warn "Some tools are missing; see docs/prerequisites.md"; fi
+  # Windows checkouts with core.autocrlf=true turn the scripts into CRLF.
+  local crlf
+  crlf=$(grep -rlI $'\r' --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | head -5 || true)
+  if [[ -n $crlf ]]; then
+    log_warn "Files with Windows (CRLF) line endings, which Bash cannot run:"
+    printf '    %s\n' "${crlf//$'\n'/$'\n'    }"
+    log_warn "Fix them with:"
+    printf "    find '%s' -type f ! -name '*.bat' ! -name '*.cmd' ! -path '*/.git/*' -exec sed -i '%s' {} +\n" "$DEVOPS_HOME" 's/\r$//'
+    ok=0
+  else
+    log_ok "line endings (LF)"
+  fi
+  if (( ok )); then log_ok "All good"; else log_warn "Some checks failed; see docs/prerequisites.md"; fi
 }

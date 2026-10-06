@@ -117,6 +117,18 @@ Notes:
 - On Linux and macOS keep the executable bit when committing (`unzip` and git
   keep it). If `devops.sh` lost it, run
   `git update-index --chmod=+x mvn-devops/devops.sh`.
+- Line endings: Bash cannot run scripts with Windows (CRLF) line endings, and
+  git on Windows (`core.autocrlf=true`) converts files to CRLF on checkout.
+  The zip contains `mvn-devops/.gitattributes`, which keeps every file LF (and
+  `devops.bat` CRLF) whatever `core.autocrlf` is, so commit it together with
+  the folder. `devops.sh doctor` reports files that are already CRLF and prints
+  the command that fixes them. A project that committed mvn-devops before this
+  file existed adds it from the new zip, then fixes its checkout once with:
+
+  ```bash
+  git add --renormalize mvn-devops && git commit -m "Normalize mvn-devops line endings"
+  rm -rf mvn-devops && git checkout -- mvn-devops
+  ```
 
 ## Quick start
 

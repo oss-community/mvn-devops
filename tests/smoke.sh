@@ -87,4 +87,20 @@ for pair in 1.2.0:1.2.1-SNAPSHOT 1.9:1.10-SNAPSHOT 2.0.0-RC1:2.0.0-RC2-SNAPSHOT 
 done
 printf 'ok  release versions\n'
 
+# Line endings: mvn-devops committed into a project stays LF even when the
+# project is cloned with core.autocrlf=true (git on Windows), and doctor reports CRLF.
+crlf_dir="$WORK/crlf"
+mkdir -p "$crlf_dir/app/mvn-devops"
+cp -R "$ROOT"/{.gitattributes,devops.sh,devops.bat,lib,modules,templates,VERSION} "$crlf_dir/app/mvn-devops/"
+git -C "$crlf_dir/app" init -q
+git -C "$crlf_dir/app" add -A
+git -C "$crlf_dir/app" -c user.name=t -c user.email=t@t commit -qm init
+git -c core.autocrlf=true clone -q "$crlf_dir/app" "$crlf_dir/clone"
+! grep -rlI $'\r' --exclude='*.bat' "$crlf_dir/clone/mvn-devops" > /dev/null || fail "line endings: CRLF after autocrlf checkout"
+grep -q $'\r$' "$crlf_dir/clone/mvn-devops/devops.bat" || fail "line endings: devops.bat should be CRLF"
+sed -i 's/$/\r/' "$crlf_dir/clone/mvn-devops/templates/settings.xml"
+doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
+grep -q "CRLF" <<< "$doctor_out" || fail "line endings: doctor should report CRLF"
+printf 'ok  line endings\n'
+
 printf 'All smoke tests passed\n'

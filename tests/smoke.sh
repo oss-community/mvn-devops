@@ -41,7 +41,8 @@ for orchestrator in maven jenkins concourse; do
       grep -q '^SONAR_URL=http://sonarqube:9000$' <<< "$env_out" || fail "jenkins: SONAR_URL should use the service name" ;;
     concourse)
       grep -q 'passed: \[ci\]' "$project/.devops/generated/concourse/pipeline.yml" || fail "concourse: cd job missing"
-      grep -q '^SONAR_TOKEN:' "$project/.devops/generated/concourse/vars.yml" || fail "concourse: vars missing" ;;
+      grep -q '^SONAR_TOKEN:' "$project/.devops/generated/concourse/vars.yml" || fail "concourse: vars missing"
+      grep -q "tag: '3.9-eclipse-temurin-21'" "$project/.devops/generated/concourse/pipeline.yml" || fail "concourse: build image should be Maven 3.9, Java 21" ;;
   esac
   if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then
     devops compose config -q || fail "$orchestrator: compose config is invalid"

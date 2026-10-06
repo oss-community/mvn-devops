@@ -311,6 +311,19 @@ cmd_doctor() {
     if docker compose version > /dev/null 2>&1; then log_ok "docker compose"; else log_warn "docker compose plugin not found"; ok=0; fi
     if docker info > /dev/null 2>&1; then log_ok "docker daemon reachable on $(docker_host_default)"; else log_warn "docker daemon is not running"; ok=0; fi
   fi
+  # The maven orchestrator and release use the Java and Maven of this machine.
+  local java_major mvn_version
+  if command -v java > /dev/null; then
+    java_major=$(java -version 2>&1 | awk -F'"' '/version/ { split($2, v, "."); print (v[1] == 1 ? v[2] : v[1]); exit }')
+    if [[ $java_major =~ ^[0-9]+$ ]] && (( java_major < $(value JAVA_VERSION 21) )); then
+      log_warn "java is version $java_major; the pipeline uses Java $(value JAVA_VERSION 21)"
+    fi
+  fi
+  if command -v mvn > /dev/null; then
+    mvn_version=$(mvn -version 2>/dev/null | awk '/^Apache Maven/ { print $3; exit }')
+    [[ -z $mvn_version || $mvn_version == "$(value MAVEN_VERSION 3.9)"* ]] \
+      || log_warn "mvn is version $mvn_version; the pipeline uses Maven $(value MAVEN_VERSION 3.9)"
+  fi
   # Only site publishing with the maven orchestrator needs your own SSH key.
   if command -v ssh > /dev/null; then
     if ssh -T -o BatchMode=yes -o ConnectTimeout=5 "git@$(github_host)" 2>&1 | grep -q 'successfully authenticated'; then

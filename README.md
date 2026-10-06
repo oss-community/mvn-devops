@@ -59,23 +59,69 @@ The Linux packages install into `/usr/share/mvn-devops` and add the command
 `devops.sh` in the unpacked folder. A `git clone` of this repository works
 the same way. `mvn-devops --version` prints the installed version.
 
-### Shipping it with the project
+### Shipping it with the project (zip)
 
 mvn-devops can live inside the project and be committed with it, so everyone
-who clones the project gets the same DevOps setup, like the Maven wrapper:
+who clones the project gets the same DevOps setup, like the Maven wrapper.
+
+**1. Download and extract** `mvn-devops-<version>.zip` from the
+[releases page](https://github.com/oss-community/mvn-devops/releases) into the
+project root, and rename the folder to `mvn-devops` so paths stay the same
+across upgrades.
+
+Linux, macOS, Git Bash:
 
 ```bash
 cd my-maven-project
-unzip mvn-devops-1.0.0.zip && mv mvn-devops-1.0.0 mvn-devops
-git add mvn-devops && git commit -m "Add mvn-devops 1.0.0"
-mvn-devops/devops.sh setup        # Windows: mvn-devops\devops.bat setup
+curl -fsSLO https://github.com/oss-community/mvn-devops/releases/download/v1.0.0/mvn-devops-1.0.0.zip
+unzip -q mvn-devops-1.0.0.zip && mv mvn-devops-1.0.0 mvn-devops && rm mvn-devops-1.0.0.zip
 ```
 
-The folder has no `pom.xml`, so Maven and the pipeline ignore it. Upgrade by
-replacing the folder with a newer zip and committing. Use the zip or tar.gz,
-not a `git clone`, which would put a repository inside the project's
-repository. The `.devops/` folder with the stored values keeps itself out of
-git either way.
+Windows PowerShell (or right-click the zip > Extract All, then rename the folder):
+
+```powershell
+cd my-maven-project
+Invoke-WebRequest https://github.com/oss-community/mvn-devops/releases/download/v1.0.0/mvn-devops-1.0.0.zip -OutFile mvn-devops.zip
+Expand-Archive mvn-devops.zip -DestinationPath . ; Rename-Item mvn-devops-1.0.0 mvn-devops ; Remove-Item mvn-devops.zip
+```
+
+The project then looks like this:
+
+```
+my-maven-project/
+  pom.xml
+  mvn-devops/          committed: devops.sh, devops.bat, lib/, modules/, ...
+  .devops/             created by setup, never committed (passwords, tokens)
+```
+
+**2. Commit it:**
+
+```bash
+git add mvn-devops && git commit -m "Add mvn-devops 1.0.0"
+```
+
+**3. Use it from the project root:**
+
+```bash
+mvn-devops/devops.sh setup        # Windows: mvn-devops\devops.bat setup
+mvn-devops/devops.sh run
+```
+
+Everyone else clones the project and runs `mvn-devops/devops.sh setup`; each
+person answers the questions for their own machine.
+
+**Upgrade** by deleting the `mvn-devops` folder, extracting the new zip the
+same way and committing. `mvn-devops/devops.sh --version` shows the version in
+use.
+
+Notes:
+
+- The folder has no `pom.xml`, so Maven, Sonar and the pipeline ignore it.
+- Use the zip or tar.gz, not a `git clone`, which would put a repository
+  inside the project's repository.
+- On Linux and macOS keep the executable bit when committing (`unzip` and git
+  keep it). If `devops.sh` lost it, run
+  `git update-index --chmod=+x mvn-devops/devops.sh`.
 
 ## Quick start
 

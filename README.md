@@ -44,8 +44,7 @@ own script, and one entry point asks which modules you want.
 
 ## Install
 
-Install it once per machine, not inside a project. Every release on the
-[releases page](https://github.com/oss-community/mvn-devops/releases) has:
+Every release on the [releases page](https://github.com/oss-community/mvn-devops/releases) has:
 
 | File | For |
 |---|---|
@@ -59,6 +58,24 @@ The Linux packages install into `/usr/share/mvn-devops` and add the command
 `mvn-devops`. With the zip or tar.gz the command is `devops.bat` or
 `devops.sh` in the unpacked folder. A `git clone` of this repository works
 the same way. `mvn-devops --version` prints the installed version.
+
+### Shipping it with the project
+
+mvn-devops can live inside the project and be committed with it, so everyone
+who clones the project gets the same DevOps setup, like the Maven wrapper:
+
+```bash
+cd my-maven-project
+unzip mvn-devops-1.0.0.zip && mv mvn-devops-1.0.0 mvn-devops
+git add mvn-devops && git commit -m "Add mvn-devops 1.0.0"
+mvn-devops/devops.sh setup        # Windows: mvn-devops\devops.bat setup
+```
+
+The folder has no `pom.xml`, so Maven and the pipeline ignore it. Upgrade by
+replacing the folder with a newer zip and committing. Use the zip or tar.gz,
+not a `git clone`, which would put a repository inside the project's
+repository. The `.devops/` folder with the stored values keeps itself out of
+git either way.
 
 ## Quick start
 

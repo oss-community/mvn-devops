@@ -28,11 +28,6 @@ Artifact repositories (choose any, comma separated, 0 for none)
 ...
 ```
 
-It grew out of the shell scripts in
-[pine-core-java](https://github.com/oss-community/pine-core-java), where every
-orchestrator had its own copy of every tool. Here each tool is a module with its
-own script, and one entry point asks which modules you want.
-
 ## Prerequisites
 
 - Bash 4+ (Linux, macOS, or Git Bash on Windows; `devops.bat` finds it for you)

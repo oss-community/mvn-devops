@@ -341,6 +341,29 @@ All orchestrators use the same Java and Maven, set with `JAVA_VERSION` (21)
 and `MAVEN_VERSION` (3.9) in `secrets`. Java 21 also builds projects whose pom
 targets an older release such as 17.
 
+## Docker images
+
+Every tool runs from its official image, unchanged:
+
+| Tool | Image |
+|---|---|
+| SonarQube | `sonarqube` (with `postgres:16`) |
+| Nexus | `sonatype/nexus3` |
+| Artifactory OSS | `releases-docker.jfrog.io/jfrog/artifactory-oss` (with `postgres:16`) |
+| Concourse | `concourse/concourse` (with `postgres:16`) |
+| Concourse build tasks | `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>` |
+
+Jenkins is the one exception. The official `jenkins/jenkins` image has Java but
+no Maven, and the pipeline stages are `mvn` commands run inside Jenkins. So
+[`modules/orchestrator/jenkins/docker/Dockerfile`](modules/orchestrator/jenkins/docker/Dockerfile)
+adds a thin layer built only from official images: it starts from
+`jenkins/jenkins:lts-jdk<JAVA_VERSION>`, copies Maven from
+`maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>`, and adds git, ssh, curl,
+jq and the plugins in `plugins.txt`. `up` builds it locally; no image is
+published by mvn-devops. Java and Maven versions come from `JAVA_VERSION`
+(default 21) and `MAVEN_VERSION` (default 3.9), asked by the `maven` build
+module, so Jenkins, Concourse and your machine use the same versions.
+
 ## The compose file of your tools
 
 `up` also writes the selected tools as one plain compose project, so you can

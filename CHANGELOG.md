@@ -47,8 +47,15 @@ GitHub release.
   production namespaces, `rollback` through Helm's history. The cluster is an
   existing one (kubeconfig) or k3s in Docker. A generic chart
   (`templates/helm/app`) is used unless the project has its own.
+- GitOps with Argo CD (`argocd`): the pipeline commits the chart and the
+  release of each environment to a `gitops` branch and waits until Argo CD
+  has synced it and the application is healthy; a release that does not
+  become healthy is reverted in git. Production is released as a canary with
+  Argo Rollouts. `configure` installs both in the cluster.
+- `tests/git-server.py`, a git server for the end-to-end test that accepts
+  pushes.
 - `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft
-  1.54.1, Cosign 3.1.3, Helm 4.3.0) where the pipeline runs, checked against their
+  1.54.1, Cosign 3.1.3, Helm 4.3.0, kubectl 1.37.1) where the pipeline runs, checked against their
   release checksums and cached in `~/.cache/mvn-devops/tools`.
 
 ### Changed

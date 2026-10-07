@@ -32,8 +32,6 @@ module_secrets() {
   ask DEPLOY_HEALTH_PATH "Health check path of the application" /actuator/health
 }
 
-k3s_dir() { printf '%s/k3s' "$DEVOPS_STATE"; }
-
 # up: the local registry is reached by its service name from the k3s node,
 # and kubelet needs a flag on hosts that still use cgroup v1.
 module_prepare() {
@@ -52,25 +50,6 @@ module_prepare() {
   else
     set_value K3S_EXTRA_ARGS ''
   fi
-}
-
-# kubeconfig <host|pipeline>: the cluster's kubeconfig as this machine or the
-# pipeline reaches the API server.
-kubeconfig() {
-  local server file
-  if server_external KUBERNETES; then
-    file=$(value KUBERNETES_KUBECONFIG "$HOME/.kube/config")
-    [[ -f $file ]] && cat "$file"
-    return 0
-  fi
-  file="$(k3s_dir)/kubeconfig.yaml"
-  [[ -f $file ]] || return 0
-  if [[ $1 == pipeline && ${DEVOPS_RUNS_IN:-host} == docker ]]; then
-    server=https://k3s:6443
-  else
-    server="https://$(devops_host):$(value KUBERNETES_API_HOST_PORT 6443)"
-  fi
-  sed "s#server: https://[^ ]*#server: $server#" "$file"
 }
 
 module_configure() {
@@ -114,12 +93,15 @@ module_env() {
 }
 
 module_stages() {
+  # With Argo CD the pipeline commits to the GitOps branch instead.
+  [[ " $MODULES " == *" gitops/"* ]] && return 0
   shell_stage 80 cd deploy-staging "sh \"\$DEVOPS_SCRIPTS/deploy-helm.sh\" staging"
   shell_stage 90 prod deploy-production "sh \"\$DEVOPS_SCRIPTS/deploy-helm.sh\" production"
 }
 
 # rollback [staging|production] [--to TAG]
 module_rollback() {
+  [[ " $MODULES " == *" gitops/"* ]] && return 0
   local env=production tag=''
   while (( $# )); do
     case $1 in

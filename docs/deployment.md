@@ -202,3 +202,42 @@ curl http://localhost:8281/hello
 
 `devops.sh rollback` goes back to the previous Helm revision (`helm rollback`);
 `--to TAG` deploys an earlier image again.
+
+## GitOps with Argo CD
+
+With the `argocd` module (*GitOps* category, it adds `kubernetes`) the
+pipeline does not deploy to the cluster itself. It writes the desired state
+to git, and Argo CD, running in the cluster, makes the cluster match it:
+
+| Stage | Phase | What happens |
+|---|---|---|
+| `deploy-staging` (80) | cd | commits `environments/staging/` to the GitOps branch and waits until Argo CD reports the application synced and healthy |
+| `deploy-production` (90) | prod | the same for `environments/production/`, after the approval |
+
+Each environment directory holds the chart and `environment.yaml` with the
+image tag and the environment's values, so the branch's history is the
+history of every release, and a pull request against it is a release
+proposal. When a release does not become healthy within `GITOPS_TIMEOUT`
+(600 seconds), the script commits the previous release again and the stage
+fails. `devops.sh rollback` is such a commit too.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `GITOPS_BRANCH` | `gitops` | branch of the project's repository with the desired state; created by the first release |
+| `GITOPS_CANARY` | `yes` | production as a canary with Argo Rollouts |
+| `ARGOCD_HOST_PORT` | 8443 | k3s: Argo CD's web console on this machine (`admin`, `devops.sh get ARGOCD_ADMIN_PASSWORD`) |
+
+`configure` installs Argo CD and Argo Rollouts from their release manifests,
+adds the repository with the GitHub token, and creates the Applications
+`<app>-staging` and `<app>-production`, which sync automatically, prune what
+was removed from git and undo changes made by hand.
+
+**The canary** replaces the Deployment with an Argo Rollouts `Rollout`: the
+new version first gets a quarter, then half of the pods, with a pause after
+each step, and then all of them. Its pods must become ready within three
+minutes, or Argo Rollouts aborts and keeps the stable version. Change the
+steps with `canary.steps` in a chart of your own.
+
+Images from a private registry need an image pull secret in the namespace;
+GitOps never writes credentials to git. Create it once, or keep it in git
+encrypted with Sealed Secrets.

@@ -164,6 +164,15 @@ for orchestrator in maven jenkins; do
   expected=https://localhost:6443; [[ $orchestrator == jenkins ]] && expected=https://k3s:6443
   [[ $server == "$expected" ]] || fail "kubernetes: $orchestrator reaches the API at '$server'"
 done
+# Argo CD brings the kubernetes module and replaces its Helm stages.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator concourse --with docker-registry,argocd > /dev/null
+grep -q 'deploy/kubernetes' "$project/devops.conf" || fail "argocd: kubernetes module not added"
+devops secrets > /dev/null
+stages=$(devops stages)
+grep -q 'deploy-gitops.sh" staging' <<< "$stages" || fail "argocd: no GitOps staging stage"
+! grep -q 'deploy-helm.sh' <<< "$stages" || fail "argocd: Helm stages still there"
+[[ $(grep -c ' deploy-' <<< "$stages") == 2 ]] || fail "argocd: expected two deploy stages"
 printf 'ok  kubernetes\n'
 ! devops init --orchestrator maven --with docker-host,kubernetes > /dev/null 2>&1 || fail "deploy: two deployment modules accepted"
 ! devops init --orchestrator maven --with docker-registry,github-container > /dev/null 2>&1 || fail "image: two image modules accepted"

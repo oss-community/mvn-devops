@@ -149,7 +149,14 @@ module_run() {
   [[ $job == ci || $job == cd || $job == prod ]] || die "--phase must be ci, cd or prod"
   fly status > /dev/null 2>&1 || module_configure
   # Build the latest commit, not the one Concourse saw at its last check.
-  [[ $job == ci ]] && fly check-resource --resource "$(pipeline_name)/source" > /dev/null
+  # Right after setup the worker may not have registered yet.
+  if [[ $job == ci ]]; then
+    local tries
+    for (( tries = 0; tries < 30; tries++ )); do
+      fly check-resource --resource "$(pipeline_name)/source" > /dev/null 2>&1 && break
+      sleep 2
+    done
+  fi
   fly trigger-job --job "$(pipeline_name)/$job" --watch
 }
 

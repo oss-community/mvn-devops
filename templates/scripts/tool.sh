@@ -2,7 +2,7 @@
 # Prints the path of a pinned command line tool, downloading it from its
 # official release on first use and checking it against the release checksums.
 #
-#   tool.sh <trivy|syft|cosign|helm>
+#   tool.sh <trivy|syft|cosign|helm|kubectl>
 #
 # Tools are cached in $DEVOPS_TOOLS (default ~/.cache/mvn-devops/tools), one
 # directory per version.  <NAME>_VERSION overrides a version, e.g.
@@ -53,6 +53,11 @@ case $name in
     asset=helm-v$version-$os-$arch.$ext
     sums=$asset.sha256sum
     member=$os-$arch/helm$exe ;;
+  kubectl)
+    version=${KUBECTL_VERSION:-1.37.1}
+    url=${DEVOPS_KUBECTL_MIRROR:-https://dl.k8s.io/release}/v$version/bin/$os/$arch
+    asset=kubectl$exe
+    sums=kubectl$exe.sha256 ;;
   *) echo "tool.sh: unknown tool $name" >&2; exit 1 ;;
 esac
 
@@ -79,7 +84,7 @@ if [ ! -x "$bin" ]; then
   case $asset in
     *.tar.gz) tar -xzf "$tmp/$asset" -C "$tmp" "$member" ;;
     *.zip) unzip -q -o "$tmp/$asset" "$member" -d "$tmp" ;;
-    *) mv "$tmp/$asset" "$tmp/$member" ;;
+    *) [ "$asset" = "$member" ] || mv "$tmp/$asset" "$tmp/$member" ;;
   esac
   [ "$member" = "$name$exe" ] || mv "$tmp/$member" "$tmp/$name$exe"
   chmod +x "$tmp/$name$exe"

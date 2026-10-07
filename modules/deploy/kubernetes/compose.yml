@@ -16,6 +16,8 @@ services:
       - "${KUBERNETES_API_HOST_PORT}:6443"
       - "${KUBERNETES_STAGING_PORT}:${KUBERNETES_STAGING_NODE_PORT}"
       - "${KUBERNETES_PRODUCTION_PORT}:${KUBERNETES_PRODUCTION_NODE_PORT}"
+      # Argo CD's web console, when the argocd module installs it.
+      - "${ARGOCD_HOST_PORT:-8443}:30443"
     tmpfs:
       - /run
       - /var/run

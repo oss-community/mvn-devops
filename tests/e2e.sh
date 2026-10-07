@@ -9,7 +9,8 @@
 #
 # Needs Docker with internet access; CI runs it on GitHub's runners
 # (.github/workflows/e2e.yml).  The project is served from a local git
-# repository over HTTP, so no GitHub repository or token is needed.
+# repository over HTTP (tests/git-server.py), so no GitHub repository or
+# token is needed.
 set -euo pipefail
 
 ORCHESTRATOR=${1:?usage: tests/e2e.sh <maven|jenkins|concourse> [modules]}
@@ -53,9 +54,8 @@ git -C "$project" init -q -b main
 git -C "$project" add -A
 git -C "$project" -c user.name=e2e -c user.email=e2e@example.com commit -qm "$EXAMPLE"
 git clone -q --bare "$project" "$WORK/git/e2e/$EXAMPLE.git"
-git -C "$WORK/git/e2e/$EXAMPLE.git" update-server-info
 git -C "$project" remote add origin "http://$HOST_IP:$GIT_PORT/e2e/$EXAMPLE.git"
-python3 -m http.server "$GIT_PORT" --bind 0.0.0.0 --directory "$WORK/git" > "$WORK/git-server.log" 2>&1 &
+python3 "$ROOT/tests/git-server.py" "$WORK/git" "$GIT_PORT" > "$WORK/git-server.log" 2>&1 &
 server_pid=$!
 sleep 1
 git ls-remote "http://$HOST_IP:$GIT_PORT/e2e/$EXAMPLE.git" > /dev/null || fail "git server not reachable"
@@ -140,20 +140,27 @@ if [[ ,$WITH, == *,cosign,* ]]; then
   fi
   printf 'ok  %s is signed\n' "$image"
 fi
+if [[ ,$WITH, == *,argocd,* ]]; then WITH+=,kubernetes; fi
 if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
   # app_check <environment>: prints the tag that runs and checks the answer.
   app_check() {
-    local env_upper port answer image
+    local env_upper port answer='' image kind
     env_upper=$(tr '[:lower:]' '[:upper:]' <<< "$1")
     if [[ ,$WITH, == *,kubernetes,* ]]; then
       port=$(devops get "KUBERNETES_${env_upper}_PORT")
-      image=$(devops compose exec -T k3s kubectl get deployment "$(devops get IMAGE_NAME)" \
+      kind=deployment
+      [[ $1 == production && ,$WITH, == *,argocd,* ]] && kind=rollouts.argoproj.io
+      image=$(devops compose exec -T k3s kubectl get "$kind" "$(devops get IMAGE_NAME)" \
         --namespace "$(devops get IMAGE_NAME)-$1" --output 'jsonpath={.spec.template.spec.containers[0].image}')
     else
       port=$(devops get "DEPLOY_${env_upper}_PORT")
       image=$(docker inspect --format '{{.Config.Image}}' "$(devops get IMAGE_NAME)-$1-app-1")
     fi
-    answer=$(curl -fsS "http://localhost:$port/hello?name=e2e") || fail "$1 does not answer on port $port"
+    for _ in $(seq 30); do
+      answer=$(curl -fsS "http://localhost:$port/hello?name=e2e" 2> /dev/null) && break
+      sleep 3
+    done
+    [[ -n ${answer:-} ]] || fail "$1 does not answer on port $port"
     jq -e --arg env "$1" '.environment == $env' <<< "$answer" > /dev/null || fail "$1 answers $answer"
     printf '%s\n' "${image##*:}"
   }
@@ -173,8 +180,7 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
   step "A second commit, then rollback"
   printf '\nChanged by the end-to-end test.\n' >> "$project/README.md"
   git -C "$project" commit -qam "Second commit"
-  git -C "$project" push -q "$WORK/git/e2e/$EXAMPLE.git" main
-  git -C "$WORK/git/e2e/$EXAMPLE.git" update-server-info
+  git -C "$project" push -q origin main
   second=$(git -C "$project" rev-parse --short=12 HEAD)
   run_pipeline
   devops run --phase prod

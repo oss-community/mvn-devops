@@ -60,6 +60,7 @@ Every tool runs from its official image, unchanged:
 | Docker registry | `registry:3` |
 | Simulated deploy machine | built from `docker:cli` with openssh-server and curl |
 | Kubernetes | `rancher/k3s:v1.37.1-k3s1` (`K3S_IMAGE_TAG`) |
+| Argo CD, Argo Rollouts | the projects' release manifests (3.5.4, 1.10.0), applied to the cluster |
 
 Jenkins is the one exception. The official `jenkins/jenkins` image has Java but
 no Maven, and the pipeline stages are `mvn` commands run inside Jenkins. So

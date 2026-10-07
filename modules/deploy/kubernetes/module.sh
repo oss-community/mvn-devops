@@ -112,8 +112,7 @@ module_rollback() {
   done
   log_step "Rollback of $env${tag:+ to $tag}"
   (
-    # shellcheck disable=SC1091
-    source "$DEVOPS_ENV/pipeline.sh"
+    source_pipeline_env
     export KUBECONFIG_B64
     KUBECONFIG_B64=$(kubeconfig host | base64 | tr -d '\n')
     sh "$DEVOPS_HOME/templates/scripts/deploy-helm.sh" "$env" rollback "$tag"

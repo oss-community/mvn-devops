@@ -5,6 +5,9 @@
 #   - with the database module (DATABASE_ENGINE), the connection to the
 #     environment's database at <database host>: SPRING_DATASOURCE_URL,
 #     _USERNAME and _PASSWORD;
+#   - with the monitoring module (METRICS_EXPOSURE), the actuator endpoints
+#     the application exposes, so Prometheus can scrape it, and histograms of
+#     the response times;
 #   - with Vault (VAULT_ADDR), the KV (version 2) secret
 #     $VAULT_KV_MOUNT/$VAULT_APP/<environment>, which wins over the above.
 #     The (periodic) token is renewed, so it stays valid while the pipeline
@@ -21,19 +24,25 @@ scripts=$(cd "$(dirname "$0")" && pwd)
 
 json() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"; }
 
-database='{}'
+settings='{}'
 if [ "${DATABASE_ENGINE:-}" = postgresql ] && [ -n "$db_host" ]; then
   case $environment in
     staging) password=${DATABASE_STAGING_PASSWORD:-} ;;
     production) password=${DATABASE_PRODUCTION_PASSWORD:-} ;;
     *) password='' ;;
   esac
-  database="{\"SPRING_DATASOURCE_URL\": $(json "jdbc:postgresql://$db_host:5432/$DATABASE_NAME"),"
-  database="$database \"SPRING_DATASOURCE_USERNAME\": $(json "$DATABASE_NAME"), \"SPRING_DATASOURCE_PASSWORD\": $(json "$password")}"
+  settings="{\"SPRING_DATASOURCE_URL\": $(json "jdbc:postgresql://$db_host:5432/$DATABASE_NAME"),"
+  settings="$settings \"SPRING_DATASOURCE_USERNAME\": $(json "$DATABASE_NAME"), \"SPRING_DATASOURCE_PASSWORD\": $(json "$password")}"
+fi
+
+if [ -n "${METRICS_EXPOSURE:-}" ]; then
+  setting="\"MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE\": $(json "$METRICS_EXPOSURE"),"
+  setting="$setting \"MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILESHISTOGRAM_HTTP_SERVER_REQUESTS\": \"true\""
+  if [ "$settings" = '{}' ]; then settings="{$setting}"; else settings="${settings%\}}, $setting}"; fi
 fi
 
 if [ -z "${VAULT_ADDR:-}" ]; then
-  printf '%s\n' "$database"
+  printf '%s\n' "$settings"
   exit 0
 fi
 jq=$(command -v jq 2> /dev/null || sh "$scripts/tool.sh" jq)
@@ -51,4 +60,4 @@ case $status in
     cat "$work/secret.json" >&2 2> /dev/null || true
     exit 1 ;;
 esac
-"$jq" -c --argjson db "$database" '$db + (.data.data // {} | with_entries(.value |= tostring))' "$work/secret.json"
+"$jq" -c --argjson base "$settings" '$base + (.data.data // {} | with_entries(.value |= tostring))' "$work/secret.json"

@@ -14,6 +14,7 @@
 | GitOps | one or none | `argocd` (adds `kubernetes`) |
 | Database | one or none | `postgresql` |
 | Secrets | any | `vault`, `sealed-secrets` (adds `kubernetes`) |
+| Monitoring | any | `prometheus` (with Grafana), `loki` (adds `prometheus`) |
 
 **Artifactory OSS** does not allow creating repositories through its API.
 After `configure`, open Artifactory, choose Quick Setup > Maven and enter the

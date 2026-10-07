@@ -345,3 +345,57 @@ The passwords of the ci database and of each environment's database are
 generated (`devops.sh get DATABASE_PRODUCTION_PASSWORD`). A database keeps the
 password it was created with: after changing one, change it in the database
 too (`ALTER USER`).
+
+## Monitoring
+
+The *Monitoring* modules watch the deployed application in staging and
+production. They run in Docker next to the other tools.
+
+**Prometheus and Grafana** (`prometheus`): Prometheus scrapes the
+application's metrics in each environment every 15 seconds, labelled
+`application` and `environment`, and keeps them for 15 days. Grafana opens on
+the dashboard *Application*: whether each environment is up, requests per
+second, failed requests, response times (95th percentile and average), JVM
+heap, CPU and database connections. Prometheus raises two alerts, visible at
+`/alerts`: *ApplicationDown* when an environment does not answer for two
+minutes, and *HighErrorRate* when more than 5% of its requests fail.
+
+The application needs Micrometer's Prometheus registry, as in the examples:
+
+```xml
+<dependency>
+  <groupId>io.micrometer</groupId>
+  <artifactId>micrometer-registry-prometheus</artifactId>
+  <scope>runtime</scope>
+</dependency>
+```
+
+The deployments expose its endpoint (`/actuator/prometheus`) and turn on the
+response time histograms through the application's environment
+(`MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE`). Prometheus finds the
+environments from the deployment: the machines and ports of `docker-host`, or
+the ports of k3s. A cluster of your own is out of its reach; run Prometheus in
+the cluster there.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `PROMETHEUS_HOST_PORT` | 9090 | Prometheus on this machine |
+| `GRAFANA_HOST_PORT` | 3000 | Grafana on this machine (`admin`, `devops.sh get GRAFANA_ADMIN_PASSWORD`) |
+| `METRICS_PATH` | `/actuator/prometheus` | where the application's metrics are |
+
+**Loki** (`loki`, adds `prometheus`): Loki keeps the application's logs and
+Grafana searches them, on the dashboard *Application logs* or in Explore with
+queries such as `{environment="production"} |= "ERROR"`. Grafana Alloy
+collects them with the labels `application`, `environment`, `container`
+(`app`, `db`) and `source`: from the containers of the simulated machine,
+which run on the same Docker, and from the pods of k3s. Machines and clusters
+of your own need an agent there, such as Alloy, that pushes to Loki's push
+URL (`devops.sh urls`).
+
+| Question | Default | Meaning |
+|---|---|---|
+| `LOKI_HOST_PORT` | 3100 | Loki on this machine |
+
+The configuration of Prometheus, Grafana and Alloy is written to
+`.devops/monitoring` by `devops.sh up`; run `up` and `configure` again after
+changing the deployment.

@@ -228,4 +228,40 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     printf 'ok  production kept its data through the releases\n'
   fi
 fi
+if [[ ,$WITH, == *,prometheus,* ]]; then
+  step "Monitoring"
+  prometheus="http://localhost:$(devops get PROMETHEUS_HOST_PORT)"
+  # query <PromQL>: the first value of the result, empty when there is none.
+  query() { curl -fsS -G "$prometheus/api/v1/query" --data-urlencode "query=$1" | jq -r '.data.result[0].value[1] // empty'; }
+  for env in staging production; do
+    up=''
+    for _ in $(seq 40); do
+      up=$(query "up{job=\"app\", environment=\"$env\"}")
+      [[ $up == 1 ]] && break
+      sleep 3
+    done
+    [[ $up == 1 ]] || fail "Prometheus does not scrape $env: up=$up"
+  done
+  requests=$(query 'sum(http_server_requests_seconds_count{job="app", environment="production", uri="/hello"})')
+  [[ $requests =~ ^[1-9] ]] || fail "Prometheus has no requests of production: $requests"
+  printf 'ok  Prometheus scrapes staging and production (%s requests to production)\n' "$requests"
+  grafana="http://admin:$(devops get GRAFANA_ADMIN_PASSWORD)@localhost:$(devops get GRAFANA_HOST_PORT)"
+  curl -fsS "$grafana/api/search?query=Application" | jq -e 'map(.title) | index("Application")' > /dev/null \
+    || fail "Grafana has no Application dashboard"
+  curl -fsS "$grafana/api/datasources/uid/prometheus/health" | jq -e '.status == "OK"' > /dev/null \
+    || fail "Grafana cannot query Prometheus"
+  printf 'ok  Grafana shows the Application dashboard\n'
+fi
+if [[ ,$WITH, == *,loki,* ]]; then
+  lines=0
+  for _ in $(seq 40); do
+    lines=$(curl -fsS -G "http://localhost:$(devops get LOKI_HOST_PORT)/loki/api/v1/query_range" \
+      --data-urlencode 'query={environment="production"}' --data-urlencode limit=100 \
+      | jq '[.data.result[].values | length] | add // 0')
+    (( lines > 0 )) && break
+    sleep 3
+  done
+  (( lines > 0 )) || fail "Loki has no logs of production"
+  printf 'ok  Loki has %s log lines of production\n' "$lines"
+fi
 printf '\nEnd-to-end test passed: %s with %s\n' "$ORCHESTRATOR" "$WITH"

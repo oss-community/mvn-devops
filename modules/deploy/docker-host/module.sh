@@ -168,8 +168,7 @@ module_rollback() {
   target=$(ssh_target "$env" host)
   log_step "Rollback of $env${tag:+ to $tag}"
   (
-    # shellcheck disable=SC1091
-    source "$DEVOPS_ENV/pipeline.sh"
+    source_pipeline_env
     export "DEPLOY_$(upper "$env")_TARGET=${target%% *}" "DEPLOY_$(upper "$env")_SSH_PORT=${target##* }"
     export DEPLOY_SSH_KEY_B64
     DEPLOY_SSH_KEY_B64=$(base64 < "$(deploy_key)" | tr -d '\n')

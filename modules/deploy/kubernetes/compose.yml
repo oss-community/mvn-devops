@@ -23,8 +23,11 @@ services:
       - /var/run
     volumes:
       - k3s-data:/var/lib/rancher/k3s
+      # Pod logs, read by Grafana Alloy when the loki module is selected.
+      - k3s-pod-logs:/var/log/pods
       - ${DEVOPS_STATE}/k3s:/output
       - ${DEVOPS_STATE}/k3s/registries.yaml:/etc/rancher/k3s/registries.yaml:ro
 
 volumes:
   k3s-data:
+  k3s-pod-logs:

@@ -63,6 +63,10 @@ GitHub release.
   and the application its connection as `SPRING_DATASOURCE_*`. A `migrate`
   stage applies the Flyway migrations to an empty database in the ci phase.
   `examples/hello-data` is a sample application with a database.
+- Monitoring (`prometheus`, `loki`): Prometheus scrapes the application in
+  each environment and alerts when it is down or fails requests; Grafana
+  shows a dashboard of the application and searches its logs, which Grafana
+  Alloy collects into Loki from the simulated machine and from k3s.
 - `tests/git-server.py`, a git server for the end-to-end test that accepts
   pushes.
 - `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft

@@ -252,6 +252,24 @@ if [[ -n $helm ]]; then
 fi
 printf 'ok  database\n'
 
+# Monitoring: Prometheus scrapes the environments the deployment has; Loki
+# brings Prometheus and its Grafana data source.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with docker-registry,docker-host,loki > /dev/null
+grep -q 'monitoring/prometheus' "$project/devops.conf" || fail "loki: prometheus module not added"
+devops secrets > /dev/null
+# "up" with a docker that does nothing writes the configuration.
+mkdir -p "$WORK/fake-bin" && printf '#!/bin/sh\nexit 0\n' > "$WORK/fake-bin/docker" && chmod +x "$WORK/fake-bin/docker"
+PATH="$WORK/fake-bin:$PATH" devops up > /dev/null
+monitoring="$project/.devops/monitoring"
+grep -q 'host.docker.internal:8181' "$monitoring/prometheus/prometheus.yml" || fail "prometheus: staging target missing"
+grep -q 'environment: "production"' "$monitoring/prometheus/prometheus.yml" || fail "prometheus: production target missing"
+grep -q 'type: loki' "$monitoring/grafana/provisioning/datasources/datasources.yml" || fail "grafana: no Loki data source"
+grep -q 'demo-app-(staging|production)' "$monitoring/alloy/config.alloy" || fail "alloy: no filter on the application"
+grep -q 'MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE' <<< "$(METRICS_EXPOSURE=health,prometheus sh "$ROOT/templates/scripts/app-secrets.sh" staging)" \
+  || fail "monitoring: the deployment does not expose the metrics"
+printf 'ok  monitoring\n'
+
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"
 rm -rf "$project/.devops" "$project/devops.conf"

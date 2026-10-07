@@ -1,8 +1,10 @@
 # hello-api
 
 A small Spring Boot web API for trying the deployment modules of mvn-devops
-(container image, deploy, security, monitoring). It answers `GET /hello` and
-reports its health at `/actuator/health`.
+(container image, deploy, security, secrets, monitoring). It answers
+`GET /hello` with the greeting in `GREETING` (a secret in Vault, when there is
+one), reports its health at `/actuator/health` and has metrics for Prometheus
+at `/actuator/prometheus` when that endpoint is exposed.
 
 ```bash
 mvn spring-boot:run

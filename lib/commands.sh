@@ -259,6 +259,16 @@ cmd_setup() {
 
 # rollback [environment] [--to TAG]: the deploy module puts back the previous
 # image (or the given tag) in the environment, production by default.
+# For the scripts a module runs on this machine (rollback): the pipeline
+# variables, with the addresses of the tools as this machine reaches them.
+source_pipeline_env() {
+  # shellcheck disable=SC1091
+  source "$DEVOPS_ENV/pipeline.sh"
+  if [[ -n ${VAULT_ADDR:-} ]] && ! server_external VAULT; then
+    VAULT_ADDR=$(host_url "$(value VAULT_HOST_PORT 8200)")
+  fi
+}
+
 cmd_rollback() {
   load_project
   env_generate

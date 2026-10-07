@@ -99,7 +99,9 @@ module_configure() {
   fi
   set_value ARGOCD_ADMIN_PASSWORD "$(kubectl_host get secret argocd-initial-admin-secret --namespace argocd \
     --output 'jsonpath={.data.password}' 2> /dev/null | base64 -d 2> /dev/null || true)" secret
-  repository_secret | kubectl_host apply --filename - > /dev/null
+  if [[ -n $(value GITHUB_TOKEN) ]]; then
+    repository_secret | kubectl_host apply --filename - > /dev/null || die "Could not give Argo CD access to the repository"
+  fi
   applications | kubectl_host apply --filename - > /dev/null || die "Could not create the Argo CD applications"
   log_ok "Applications $(image_app_name)-staging and -production follow $(gitops_repo_url) ($(value GITOPS_BRANCH gitops))"
 }

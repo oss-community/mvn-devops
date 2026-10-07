@@ -52,7 +52,8 @@ module_configure() {
 }
 
 module_env() {
-  local env host=$(devops_host) port
+  local env host port
+  host=$(devops_host)
   port=$(value DATABASE_HOST_PORT 5433)
   if [[ ${DEVOPS_RUNS_IN:-host} == docker ]]; then host=database port=5432; fi
   pipeline_var DATABASE_ENGINE postgresql

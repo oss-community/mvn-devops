@@ -9,7 +9,8 @@ tests/e2e.sh maven sonarqube,nexus   # real tools in Docker: setup, the whole pi
 ```
 
 `tests/smoke.sh` runs on Linux, macOS and Windows (Git Bash) in the `ci`
-workflow. `tests/e2e.sh` builds [examples/hello-maven](../examples/hello-maven)
+workflow. `tests/e2e.sh` builds [examples/hello-maven](../examples/hello-maven), or
+[examples/hello-api](../examples/hello-api) for the deployment modules,
 with each orchestrator in the `e2e` workflow, on every push to `main` and once a
 week; it serves the project from a local git server, so it needs no GitHub
 token. With `jfrog` it checks the setup only, because Artifactory OSS

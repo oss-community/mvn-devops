@@ -19,6 +19,15 @@ GitHub release.
 - The smoke test also runs on macOS and on Windows (Git Bash).
 - `doctor --fix` converts files with CRLF line endings to LF.
 - `docs/troubleshooting.md`, and documentation split into topic pages.
+- Container images: an `image` stage builds the application with Jib (no
+  Docker or Dockerfile needed, so it works in Jenkins and Concourse too), or
+  with the project's Dockerfile, and pushes it tagged with the commit and
+  `latest`. The registry is the Distribution registry in Docker, an existing
+  registry (Docker Hub, Harbor, Nexus, Artifactory) or the GitHub Container
+  Registry. See `docs/deployment.md`.
+- `examples/hello-api`, a small Spring Boot web application with a health
+  endpoint, used by the deployment tests.
+- Stages can call scripts from `templates/scripts/` through `$DEVOPS_SCRIPTS`.
 
 ### Changed
 

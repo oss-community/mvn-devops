@@ -35,6 +35,8 @@ source "$DEVOPS_HOME/lib/modules.sh"
 source "$DEVOPS_HOME/lib/maven.sh"
 # shellcheck source=lib/pipeline.sh
 source "$DEVOPS_HOME/lib/pipeline.sh"
+# shellcheck source=lib/image.sh
+source "$DEVOPS_HOME/lib/image.sh"
 # shellcheck source=lib/docker.sh
 source "$DEVOPS_HOME/lib/docker.sh"
 # shellcheck source=lib/commands.sh

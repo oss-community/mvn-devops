@@ -127,6 +127,7 @@ mvn-devops/devops.sh -y setup
 | [Orchestrators](docs/orchestrators.md) | maven, Jenkins, Concourse, and the Docker images |
 | [Where the tools run](docs/where-tools-run.md) | existing servers, a VM, the exported compose file |
 | [Project site](docs/github-pages.md) | the Maven site on GitHub Pages |
+| [Deployment](docs/deployment.md) | container images, registries and deploying the application |
 | [Releasing your project](docs/releasing.md) | `devops.sh release` |
 | [Troubleshooting](docs/troubleshooting.md) | common errors and their fixes |
 | [IDE](docs/ide.md), [ngrok](docs/ngrok.md) | IntelliJ settings, exposing a local Jenkins to GitHub |

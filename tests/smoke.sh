@@ -105,6 +105,32 @@ grep -qx 'MODULES=scm/github build/maven orchestrator/maven' "$conf" || fail "de
 [[ ! -f "$project/.devops/profile.conf" ]] || fail "devops.conf: profile.conf left behind"
 printf 'ok  devops.conf\n'
 
+# Container image: Jib in every orchestrator, the helper scripts reach CI.
+for orchestrator in maven jenkins concourse; do
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --orchestrator "$orchestrator" --with docker-registry > /dev/null
+  devops secrets > /dev/null
+  stages=$(devops stages)
+  grep -q ' image ' <<< "$stages" || fail "image: $orchestrator has no image stage"
+  grep -q 'jib-maven-plugin' <<< "$stages" || fail "image: $orchestrator does not build with Jib"
+  devops render > /dev/null
+  env_out=$(devops env --show)
+  grep -q '^IMAGE_DEPLOY_REPOSITORY=localhost:5000/demo-app$' <<< "$env_out" || fail "image: $orchestrator deploy repository"
+  case $orchestrator in
+    maven) grep -q "^DEVOPS_SCRIPTS=$ROOT/templates/scripts$" <<< "$env_out" || fail "image: maven DEVOPS_SCRIPTS" ;;
+    jenkins) grep -q '\.devops/scripts/image-dockerfile\.sh' "$project/.devops/generated/Jenkinsfile" || fail "image: jenkins scripts" ;;
+    concourse) grep -q '\.devops/scripts/image-dockerfile\.sh' "$project/.devops/generated/concourse/pipeline.yml" || fail "image: concourse scripts" ;;
+  esac
+done
+# A Dockerfile is built with Docker where the pipeline runs on this machine.
+touch "$project/Dockerfile"
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with docker-registry > /dev/null
+devops secrets > /dev/null
+devops stages | grep -q 'image-dockerfile.sh' || fail "image: Dockerfile not used"
+rm -f "$project/Dockerfile"
+printf 'ok  image\n'
+
 # release: next development version
 # shellcheck source=../lib/release.sh
 source "$ROOT/lib/release.sh"

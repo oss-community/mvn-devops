@@ -87,11 +87,26 @@ pipeline_print() {
   done < <(pipeline_stages)
 }
 
+# Scripts that stages call as "$DEVOPS_SCRIPTS/<name>" (templates/scripts).
+# CI containers get a copy in .devops/scripts of the checkout.
+pipeline_scripts_dir() {
+  if [[ ${DEVOPS_RUNS_IN:-host} == host ]]; then
+    printf '%s' "$DEVOPS_HOME/templates/scripts"
+  else
+    printf '.devops/scripts'
+  fi
+}
+
 # One shell line that prepares a CI container: writes the framework settings
-# file to $CI_SETTINGS, sets the git identity and installs the GitHub deploy key
-# when the site module provided one.
+# file to $CI_SETTINGS and the stage scripts to .devops/scripts, sets the git
+# identity and installs the GitHub deploy key when the site module provided one.
 pipeline_ci_setup() {
+  local script
   printf 'echo %s | base64 -d > %s; ' "$(base64 < "$DEVOPS_HOME/templates/settings.xml" | tr -d '\n')" "$CI_SETTINGS"
+  printf 'mkdir -p .devops/scripts; '
+  for script in "$DEVOPS_HOME"/templates/scripts/*.sh; do
+    printf 'echo %s | base64 -d > .devops/scripts/%s; ' "$(base64 < "$script" | tr -d '\n')" "$(basename "$script")"
+  done
   printf '%s' 'git config --global user.name "$GITHUB_USERNAME"; git config --global user.email "$GITHUB_EMAIL"; '
   printf '%s' 'if [ -n "$GITHUB_DEPLOY_KEY_B64" ]; then mkdir -p ~/.ssh && chmod 700 ~/.ssh; '
   printf '%s' 'echo "$GITHUB_DEPLOY_KEY_B64" | base64 -d > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519; '

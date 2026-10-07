@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# End-to-end test: starts real tools in Docker, runs the whole pipeline of
-# examples/hello-maven and checks the results in the tools.
+# End-to-end test: starts real tools in Docker, runs the whole pipeline of an
+# example project and checks the results in the tools.
 #
 #   tests/e2e.sh <orchestrator> [modules]     e.g. tests/e2e.sh jenkins sonarqube,nexus
+#
+# The example is examples/hello-maven, or examples/hello-api when an image is
+# built; E2E_EXAMPLE picks another one.
 #
 # Needs Docker with internet access; CI runs it on GitHub's runners
 # (.github/workflows/e2e.yml).  The project is served from a local git
@@ -17,8 +20,12 @@ mkdir -p "$WORK"
 # An address the tool containers reach this machine on.
 HOST_IP=${E2E_HOST_IP:-$(hostname -I | awk '{ print $1 }')}
 GIT_PORT=${E2E_GIT_PORT:-8765}
+case ,$WITH, in
+  *,docker-registry,*) EXAMPLE=${E2E_EXAMPLE:-hello-api} ;;
+  *) EXAMPLE=${E2E_EXAMPLE:-hello-maven} ;;
+esac
 
-project="$WORK/hello-maven"
+project="$WORK/$EXAMPLE"
 devops() { "$ROOT/devops.sh" -y -p "$project" "$@"; }
 step() { printf '\n\033[1m### %s\033[0m\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -41,24 +48,24 @@ trap cleanup EXIT
 
 step "Project and git server"
 rm -rf "$project" "$WORK/git"
-cp -R "$ROOT/examples/hello-maven" "$project"
+cp -R "$ROOT/examples/$EXAMPLE" "$project"
 git -C "$project" init -q -b main
 git -C "$project" add -A
-git -C "$project" -c user.name=e2e -c user.email=e2e@example.com commit -qm "hello-maven"
-git clone -q --bare "$project" "$WORK/git/e2e/hello-maven.git"
-git -C "$WORK/git/e2e/hello-maven.git" update-server-info
-git -C "$project" remote add origin "http://$HOST_IP:$GIT_PORT/e2e/hello-maven.git"
+git -C "$project" -c user.name=e2e -c user.email=e2e@example.com commit -qm "$EXAMPLE"
+git clone -q --bare "$project" "$WORK/git/e2e/$EXAMPLE.git"
+git -C "$WORK/git/e2e/$EXAMPLE.git" update-server-info
+git -C "$project" remote add origin "http://$HOST_IP:$GIT_PORT/e2e/$EXAMPLE.git"
 python3 -m http.server "$GIT_PORT" --bind 0.0.0.0 --directory "$WORK/git" > "$WORK/git-server.log" 2>&1 &
 server_pid=$!
 sleep 1
-git ls-remote "http://$HOST_IP:$GIT_PORT/e2e/hello-maven.git" > /dev/null || fail "git server not reachable"
+git ls-remote "http://$HOST_IP:$GIT_PORT/e2e/$EXAMPLE.git" > /dev/null || fail "git server not reachable"
 
 step "devops.sh setup ($ORCHESTRATOR with $WITH)"
 devops init --orchestrator "$ORCHESTRATOR" --with "$WITH" > /dev/null
 # The committed team settings: a plain HTTP git server instead of GitHub.
 cat >> "$project/devops.conf" <<EOF
 GITHUB_URL=http://$HOST_IP:$GIT_PORT
-GITHUB_REPOSITORY=e2e/hello-maven
+GITHUB_REPOSITORY=e2e/$EXAMPLE
 NEXUS_ACCEPT_EULA=yes
 EOF
 git config --global user.name > /dev/null 2>&1 || git config --global user.name e2e
@@ -86,14 +93,27 @@ esac
 step "Results in the tools"
 if [[ ,$WITH, == *,sonarqube,* ]]; then
   measures=$(curl -fsS -u "$(devops get SONAR_TOKEN):" \
-    "http://localhost:$(devops get SONAR_HOST_PORT)/api/measures/component?component=org.example:hello-maven&metricKeys=ncloc")
+    "http://localhost:$(devops get SONAR_HOST_PORT)/api/measures/component?component=org.example:$EXAMPLE&metricKeys=ncloc")
   jq -e '.component.measures[0].value | tonumber > 0' <<< "$measures" > /dev/null || fail "SonarQube has no analysis: $measures"
-  printf 'ok  SonarQube analysed hello-maven\n'
+  printf 'ok  SonarQube analysed %s\n' "$EXAMPLE"
 fi
 if [[ ,$WITH, == *,nexus,* ]]; then
   curl -fsS -o /dev/null -u "admin:$(devops get NEXUS_ADMIN_PASSWORD)" \
-    "http://localhost:$(devops get NEXUS_HOST_PORT)/repository/maven-snapshots/org/example/hello-maven/1.0.0-SNAPSHOT/maven-metadata.xml" \
-    || fail "Nexus has no hello-maven snapshot"
+    "http://localhost:$(devops get NEXUS_HOST_PORT)/repository/maven-snapshots/org/example/$EXAMPLE/1.0.0-SNAPSHOT/maven-metadata.xml" \
+    || fail "Nexus has no $EXAMPLE snapshot"
   printf 'ok  Nexus has the snapshot\n'
+fi
+if [[ ,$WITH, == *,docker-registry,* ]]; then
+  tag=$(git -C "$project" rev-parse --short=12 HEAD)
+  tags=$(curl -fsS "http://localhost:$(devops get REGISTRY_HOST_PORT)/v2/$(devops get IMAGE_NAME)/tags/list")
+  jq -e --arg tag "$tag" '.tags | index($tag) and index("latest")' <<< "$tags" > /dev/null \
+    || fail "the registry has no image tagged $tag and latest: $tags"
+  docker pull -q "localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$tag" > /dev/null
+  docker run -d --name e2e-image -p 18080:8080 "localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$tag" > /dev/null
+  for _ in $(seq 60); do curl -fsS -o /dev/null http://localhost:18080/actuator/health 2> /dev/null && break; sleep 2; done
+  health=$(curl -fsS http://localhost:18080/actuator/health || true)
+  docker rm -f e2e-image > /dev/null
+  [[ $health == *UP* ]] || fail "the image does not start: $health"
+  printf 'ok  the registry has the image %s and it starts\n' "$tag"
 fi
 printf '\nEnd-to-end test passed: %s with %s\n' "$ORCHESTRATOR" "$WITH"

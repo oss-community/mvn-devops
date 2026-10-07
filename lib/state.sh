@@ -244,6 +244,7 @@ env_generate() {
   for id in $MODULES; do
     module_hook "$id" module_env
   done
+  pipeline_var DEVOPS_SCRIPTS "$(pipeline_scripts_dir)"
   unset PIPELINE_VARS_FILE
 
   # Last definition wins, order of first appearance is kept.

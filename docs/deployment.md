@@ -1,0 +1,59 @@
+# Container images and deployment
+
+These modules turn the build into something that runs: an image in a
+registry, and later a running application. They are capabilities for your
+project; select the ones you want in `init`.
+
+The [hello-api example](../examples/hello-api) is a small web application
+with a health endpoint (`/actuator/health`) that the end-to-end tests deploy.
+
+## Container image
+
+Choose one module of the *Container image* category:
+
+| Module | Registry |
+|---|---|
+| `docker-registry` | The Distribution registry in Docker (port 5000), or an existing registry given as `REGISTRY_SERVER_URL`: `https://docker.io`, Harbor, a Docker repository of Nexus or Artifactory |
+| `github-container` | The GitHub Container Registry (`ghcr.io/<owner>/<image>`), with the GitHub user and token. The token needs `write:packages` ([github-setup.md](github-setup.md)) |
+
+The `image` stage (cd phase, order 75) builds the application and pushes it
+with two tags:
+
+- the commit, `git rev-parse --short=12 HEAD`. It never changes, and it is
+  what deployments use, so a rollback is just the previous tag;
+- `latest`, for people.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `IMAGE_NAME` | the project name | repository name in the registry; add the namespace where the registry needs one (`acme/app` on Docker Hub) |
+| `IMAGE_MODULE` | empty | Maven module that is the application, in a multi-module project |
+| `IMAGE_BUILDER` | `jib` | `jib`, or `dockerfile` to build the project's own `Dockerfile` |
+| `IMAGE_BASE` | `eclipse-temurin:<java>-jre` | base image (Jib) |
+| `IMAGE_PORT` | `8080` | port the application listens on (Jib) |
+
+**Jib** (the default) builds the image from the Maven build without Docker and
+without a Dockerfile, so it works in every orchestrator. **A Dockerfile** is
+used by default when the project has one in its root and the pipeline runs on
+this machine (the `maven` orchestrator); Jenkins and Concourse run without a
+Docker daemon and need Jib.
+
+The pipeline gets these variables:
+
+| Variable | Meaning |
+|---|---|
+| `IMAGE_REPOSITORY` | where the pipeline pushes, as it reaches the registry |
+| `IMAGE_DEPLOY_REPOSITORY` | the same repository as the machines that run the image pull it |
+| `IMAGE_REGISTRY_USERNAME`, `IMAGE_REGISTRY_PASSWORD` | credentials, empty for the local registry |
+
+The local registry has no TLS and no login. Docker accepts it without
+configuration only as `localhost:<port>`, which is why the deploy repository
+uses `localhost`. To pull from it on another machine, add it to
+`insecure-registries` in that machine's `/etc/docker/daemon.json`, or use a
+registry with TLS.
+
+Check the result:
+
+```bash
+curl -s http://localhost:5000/v2/hello-api/tags/list
+docker run --rm -p 8080:8080 localhost:5000/hello-api:latest
+```

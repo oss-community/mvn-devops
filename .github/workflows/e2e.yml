@@ -1,7 +1,7 @@
 name: e2e
 
-# Starts the real tools in Docker, runs the pipeline of examples/hello-maven
-# with each orchestrator and checks the results in the tools (tests/e2e.sh).
+# Starts the real tools in Docker, runs the pipeline of an example project
+# (examples/hello-maven, or hello-api for deployments) with each orchestrator and checks the results in the tools (tests/e2e.sh).
 on:
   push:
     branches: [main]
@@ -29,6 +29,12 @@ jobs:
             with: sonarqube,nexus
           - orchestrator: concourse
             with: sonarqube,nexus
+          - orchestrator: maven
+            with: docker-registry
+          - orchestrator: jenkins
+            with: docker-registry
+          - orchestrator: concourse
+            with: docker-registry
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

@@ -75,6 +75,10 @@ pipeline_url SERVICE PORT HOST_PORT [PATH]   # service name or DEVOPS_HOST, depe
 host_url HOST_PORT [PATH]             # DEVOPS_HOST URL
 github_url / github_host / github_api # github.com or GitHub Enterprise
 
+image_secrets                         # image modules: name, module, builder, base image, port
+image_env PUSH_REPO DEPLOY_REPO [USER] [PASSWORD]   # IMAGE_REPOSITORY and the rest for the pipeline
+image_stages INSECURE AUTH            # the image stage (Jib, or the project's Dockerfile)
+
 compose ...                           # docker compose of the project, e.g. compose exec -T nexus ...
 wait_http URL [timeout] [status regex]
 log_step / log_ok / log_warn / log_dim / die / confirm
@@ -86,6 +90,12 @@ A deploy target also needs a `<server>` with its id in `templates/settings.xml`.
 
 Stage arguments are embedded in single-quoted strings by the orchestrators, so
 they may not contain `'`, `\`, `|` or `${`. Use `$VAR` instead of `${VAR}`.
+
+A stage that needs more than one command calls a script from
+`templates/scripts/`: `shell_stage 80 cd deploy "sh \"\$DEVOPS_SCRIPTS/deploy.sh\""`.
+`DEVOPS_SCRIPTS` is that directory when the pipeline runs on this machine;
+Jenkins and Concourse get a copy in `.devops/scripts` before the first stage.
+Scripts get every pipeline variable in the environment.
 
 ## Example: a new artifact repository
 

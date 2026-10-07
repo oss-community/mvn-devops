@@ -11,38 +11,11 @@
 
 ENVIRONMENTS='staging production'
 
-upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
-
 module_secrets() {
   ask PROMETHEUS_HOST_PORT "Prometheus port on the Docker machine" 9090
   ask GRAFANA_HOST_PORT "Grafana port on the Docker machine" 3000
   ask METRICS_PATH "Path of the application's Prometheus metrics" /actuator/prometheus
   has_value GRAFANA_ADMIN_PASSWORD || set_value GRAFANA_ADMIN_PASSWORD "$(random_password)" secret
-}
-
-# host_of <ssh:// URL>: the machine's host name.
-host_of() {
-  local url=${1#ssh://}
-  url=${url%%/*}; url=${url#*@}
-  printf '%s' "${url%:*}"
-}
-
-# app_target <environment>: host:port Prometheus scrapes, empty when it cannot
-# reach the environment (a cluster of its own).
-app_target() {
-  local env=$1 port url
-  if [[ " $MODULES " == *" deploy/docker-host "* ]]; then
-    port=$(value "DEPLOY_$(upper "$env")_PORT")
-    if server_external DEPLOY; then
-      url=$(value DEPLOY_SERVER_URL)
-      [[ $env == production ]] && url=$(value DEPLOY_PRODUCTION_SERVER_URL "$url")
-      printf '%s:%s' "$(host_of "$url")" "$port"
-    else
-      printf 'host.docker.internal:%s' "$port"
-    fi
-  elif [[ " $MODULES " == *" deploy/kubernetes "* ]] && ! server_external KUBERNETES; then
-    printf 'host.docker.internal:%s' "$(value "KUBERNETES_$(upper "$env")_PORT")"
-  fi
 }
 
 prometheus_config() {
@@ -54,7 +27,7 @@ prometheus_config() {
   printf '  - job_name: prometheus\n    static_configs:\n      - targets: [localhost:9090]\n'
   printf '  - job_name: app\n    metrics_path: %s\n    static_configs:\n' "$(value METRICS_PATH /actuator/prometheus)"
   for env in $ENVIRONMENTS; do
-    target=$(app_target "$env")
+    target=$(app_address "$env" docker)
     [[ -n $target ]] || continue
     printf '      - targets: ["%s"]\n        labels: {application: "%s", environment: "%s"}\n' \
       "$target" "$(image_app_name)" "$env"
@@ -112,7 +85,7 @@ module_configure() {
   wait_http "$(host_url "$(value GRAFANA_HOST_PORT 3000)" /api/health)" 180 '^200$' \
     || die "Grafana did not start. Check '$DEVOPS_CMD logs grafana'."
   log_ok "Prometheus and Grafana run"
-  [[ -n $(app_target staging) ]] \
+  [[ -n $(app_address staging docker) ]] \
     || log_warn "Prometheus cannot reach the application in this cluster; scrape it with a Prometheus there."
 }
 

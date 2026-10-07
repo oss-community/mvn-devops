@@ -2,7 +2,7 @@
 # Prints the path of a pinned command line tool, downloading it from its
 # official release on first use and checking it against the release checksums.
 #
-#   tool.sh <trivy|syft|cosign|helm|kubectl|kubeseal|jq>
+#   tool.sh <trivy|syft|cosign|helm|kubectl|kubeseal|jq|k6>
 #
 # Tools are cached in $DEVOPS_TOOLS (default ~/.cache/mvn-devops/tools), one
 # directory per version.  <NAME>_VERSION overrides a version, e.g.
@@ -70,6 +70,14 @@ case $name in
     url=$github/jqlang/jq/releases/download/jq-$version
     asset=jq-$o-$arch$exe
     sums=sha256sum.txt ;;
+  k6)
+    version=${K6_VERSION:-2.3.0}
+    case $os in darwin) o=macos ;; *) o=$os ;; esac
+    ext=tar.gz; [ $os = linux ] || ext=zip
+    url=$github/grafana/k6/releases/download/v$version
+    asset=k6-v$version-$o-$arch.$ext
+    sums=k6-v$version-checksums.txt
+    member=k6-v$version-$o-$arch/k6$exe ;;
   *) echo "tool.sh: unknown tool $name" >&2; exit 1 ;;
 esac
 

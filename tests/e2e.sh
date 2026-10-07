@@ -42,7 +42,8 @@ cleanup() {
   fi
   [[ -n $server_pid ]] && kill "$server_pid" 2> /dev/null
   if [[ ${E2E_KEEP:-0} != 1 ]]; then
-    devops destroy > /dev/null 2>&1 || true
+    # destroy also removes what the deployments left on the simulated machine.
+    "$ROOT/devops.sh" -p "$project" destroy <<< $'y\nn' > /dev/null 2>&1 || true
   fi
   exit "$status"
 }
@@ -226,6 +227,19 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     # One visit per check of production: the data outlived two deployments.
     [[ $(cat "$WORK/visits-production") == 3 ]] || fail "production's database lost visits: $(cat "$WORK/visits-production")"
     printf 'ok  production kept its data through the releases\n'
+  fi
+fi
+if [[ ,$WITH, == *,k6,* ]]; then
+  if [[ $ORCHESTRATOR == maven ]]; then
+    requests=$(jq '.metrics.http_reqs.count' "$project/target/load-test.json")
+    (( requests > 0 )) || fail "the load test made no requests"
+    printf 'ok  the load test of staging made %s requests\n' "$requests"
+  fi
+  if [[ ,$WITH, == *,prometheus,* ]]; then
+    k6=$(curl -fsS -G "http://localhost:$(devops get PROMETHEUS_HOST_PORT)/api/v1/query" \
+      --data-urlencode 'query=sum(k6_http_reqs_total{environment="staging"})' | jq -r '.data.result[0].value[1] // empty')
+    [[ $k6 =~ ^[1-9] ]] || fail "Prometheus has no load test metrics: $k6"
+    printf 'ok  Prometheus has the load test results (%s requests)\n' "$k6"
   fi
 fi
 if [[ ,$WITH, == *,prometheus,* ]]; then

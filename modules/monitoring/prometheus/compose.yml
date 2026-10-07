@@ -8,6 +8,8 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
       - --web.enable-lifecycle
+      # k6 (loadtest/k6) writes the metrics of its load tests.
+      - --web.enable-remote-write-receiver
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:

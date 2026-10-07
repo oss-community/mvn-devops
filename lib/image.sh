@@ -79,3 +79,26 @@ image_stages() {
   (( insecure )) && args+=" -Djib.allowInsecureRegistries=true -DsendCredentialsOverHttp=true"
   stage 75 cd image "$args"
 }
+
+# app_address <environment> <host|docker>: host:port of the deployed
+# application in an environment, as this machine (host) or a container next
+# to the tools (docker) reaches it; empty when it is out of reach (a cluster
+# of its own).
+app_address() {
+  local env=$1 upper url local_host
+  upper=$(printf '%s' "$env" | tr '[:lower:]' '[:upper:]')
+  local_host=$(devops_host)
+  [[ $2 == docker ]] && local_host=host.docker.internal
+  if [[ " $MODULES " == *" deploy/docker-host "* ]]; then
+    if server_external DEPLOY; then
+      url=$(value DEPLOY_SERVER_URL)
+      [[ $env == production ]] && url=$(value DEPLOY_PRODUCTION_SERVER_URL "$url")
+      url=${url#ssh://}; url=${url%%/*}; url=${url#*@}
+      printf '%s:%s' "${url%:*}" "$(value "DEPLOY_${upper}_PORT")"
+    else
+      printf '%s:%s' "$local_host" "$(value "DEPLOY_${upper}_PORT")"
+    fi
+  elif [[ " $MODULES " == *" deploy/kubernetes "* ]] && ! server_external KUBERNETES; then
+    printf '%s:%s' "$local_host" "$(value "KUBERNETES_${upper}_PORT")"
+  fi
+}

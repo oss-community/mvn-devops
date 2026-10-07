@@ -67,11 +67,16 @@ GitHub release.
   each environment and alerts when it is down or fails requests; Grafana
   shows a dashboard of the application and searches its logs, which Grafana
   Alloy collects into Loki from the simulated machine and from k3s.
+- Load test (`k6`): k6 load tests staging after each deployment and stops
+  the release when responses are too slow or fail; the project's own k6
+  script or a generic one, with its results in Prometheus when that module is
+  selected.
 - `tests/git-server.py`, a git server for the end-to-end test that accepts
   pushes.
 - `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft
-  1.54.1, Cosign 3.1.3, Helm 4.3.0, kubectl 1.37.1, kubeseal 0.40.0, jq 1.8.1) where the pipeline runs, checked against their
-  release checksums and cached in `~/.cache/mvn-devops/tools`.
+  1.54.1, Cosign 3.1.3, Helm 4.3.0, kubectl 1.37.1, kubeseal 0.40.0, jq
+  1.8.1, k6 2.3.0) where the pipeline runs, checked against their release
+  checksums and cached in `~/.cache/mvn-devops/tools`.
 
 ### Changed
 

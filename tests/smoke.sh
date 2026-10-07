@@ -270,6 +270,25 @@ grep -q 'MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE' <<< "$(METRICS_EXPOSURE=heal
   || fail "monitoring: the deployment does not expose the metrics"
 printf 'ok  monitoring\n'
 
+# Load test: after staging, before production, against staging as the
+# pipeline reaches it.
+for orchestrator in maven jenkins; do
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --orchestrator "$orchestrator" --with docker-registry,kubernetes,k6,prometheus > /dev/null
+  devops secrets > /dev/null
+  stages=$(devops stages | awk 'NR > 1 { print $1 ":" $3 }' | tr '\n' ' ')
+  [[ $stages == *"80:deploy-staging 85:load-test 90:deploy-production "* ]] || fail "k6: stage order $stages"
+  env_out=$(devops env --show)
+  expected=http://localhost:8281; [[ $orchestrator == jenkins ]] && expected=http://host.docker.internal:8281
+  grep -qx "LOAD_TEST_URL=$expected" <<< "$env_out" || fail "k6: $orchestrator calls staging at the wrong address"
+  expected=http://localhost:9090; [[ $orchestrator == jenkins ]] && expected=http://prometheus:9090
+  grep -qx "LOAD_TEST_PROMETHEUS_URL=$expected" <<< "$env_out" || fail "k6: $orchestrator writes to the wrong Prometheus"
+done
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with k6 > /dev/null
+! devops secrets > /dev/null 2>&1 || fail "k6: accepted without a deployment or LOAD_TEST_URL"
+printf 'ok  load test\n'
+
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"
 rm -rf "$project/.devops" "$project/devops.conf"

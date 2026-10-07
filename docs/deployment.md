@@ -399,3 +399,36 @@ URL (`devops.sh urls`).
 The configuration of Prometheus, Grafana and Alloy is written to
 `.devops/monitoring` by `devops.sh up`; run `up` and `configure` again after
 changing the deployment.
+
+## Load test
+
+The `k6` module (*Load test* category) load tests staging with
+[k6](https://k6.io) after each deployment there, before anyone approves
+production:
+
+| Stage | Phase | What happens |
+|---|---|---|
+| `load-test` (85) | cd | `LOAD_TEST_VUS` virtual users call staging for `LOAD_TEST_DURATION`; the stage fails when a threshold fails |
+
+Without a script of its own, the project gets
+[load-test.js](../templates/scripts/load-test.js): each virtual user calls
+every path of `LOAD_TEST_PATHS` and pauses a second. It fails when more than
+`LOAD_TEST_MAX_ERROR_RATE` of the requests fail or the 95th percentile of the
+response times is above `LOAD_TEST_P95_MS`. A failed load test stops the
+release there: production keeps the version it has.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `LOAD_TEST_URL` | found from the deployment | staging as the pipeline reaches it; asked for a cluster of its own |
+| `LOAD_TEST_SCRIPT` | empty | the project's k6 script, e.g. `src/test/k6/load.js`; it gets `BASE_URL` and the values below as `__ENV` |
+| `LOAD_TEST_PATHS` | `/actuator/health` | paths the generic script calls, comma separated, e.g. `/hello,/actuator/health` |
+| `LOAD_TEST_VUS` | 10 | virtual users |
+| `LOAD_TEST_DURATION` | `30s` | how long |
+| `LOAD_TEST_P95_MS` | 500 | highest 95th percentile response time in milliseconds |
+| `LOAD_TEST_MAX_ERROR_RATE` | 0.01 | highest share of failed requests |
+
+The summary is written to `target/load-test.json`. With the `prometheus`
+module k6 also sends its metrics to Prometheus (`k6_http_reqs_total`,
+`k6_http_req_duration_p95` and others, labelled `environment`), so a load
+test shows next to the application's own metrics in Grafana. k6 is downloaded
+where the pipeline runs, like the other tools.

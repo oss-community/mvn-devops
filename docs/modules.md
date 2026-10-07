@@ -15,6 +15,7 @@
 | Database | one or none | `postgresql` |
 | Secrets | any | `vault`, `sealed-secrets` (adds `kubernetes`) |
 | Monitoring | any | `prometheus` (with Grafana), `loki` (adds `prometheus`) |
+| Load test | one or none | `k6` |
 
 **Artifactory OSS** does not allow creating repositories through its API.
 After `configure`, open Artifactory, choose Quick Setup > Maven and enter the
@@ -44,6 +45,7 @@ ORDER  PHASE STAGE            MAVEN ARGUMENTS
 77     cd   scan-image       (shell) sh "$DEVOPS_SCRIPTS/scan-image.sh"
 78     cd   sign-image       (shell) sh "$DEVOPS_SCRIPTS/sign-image.sh"
 80     cd   deploy-staging   (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" staging
+85     cd   load-test        (shell) sh "$DEVOPS_SCRIPTS/load-test.sh" staging
 89     prod verify-image     (shell) sh "$DEVOPS_SCRIPTS/verify-image.sh"
 90     prod deploy-production (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" production
 ```

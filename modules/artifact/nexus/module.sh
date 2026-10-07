@@ -7,7 +7,7 @@
 module_secrets() {
   ask_server NEXUS Nexus https://nexus.example.com
   if server_external NEXUS; then
-    ask NEXUS_USERNAME "Nexus user that may deploy" admin
+    ask_local NEXUS_USERNAME "Nexus user that may deploy" admin
     ask_secret NEXUS_PASSWORD "Password of $(value NEXUS_USERNAME)"
   else
     ask NEXUS_HOST_PORT "Nexus port on the Docker machine" 8084

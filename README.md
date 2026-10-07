@@ -102,8 +102,9 @@ mvn-devops/devops.sh setup        # Windows: mvn-devops\devops.bat setup
 mvn-devops/devops.sh run
 ```
 
-Everyone else clones the project and runs `mvn-devops/devops.sh setup`; each
-person answers the questions for their own machine.
+Commit `devops.conf` too. Everyone else clones the project and runs
+`mvn-devops/devops.sh setup`: the tools and answers come from `devops.conf`, so
+they are only asked for their own passwords, tokens and user names.
 
 **Upgrade** by deleting the `mvn-devops` folder, extracting the new zip the
 same way and committing. `mvn-devops/devops.sh --version` shows the version in
@@ -144,15 +145,16 @@ mvn-devops run        # run the pipeline
 mvn-devops urls       # web consoles and how to log in
 ```
 
-or from anywhere with `mvn-devops -p ~/work/my-maven-project setup`. The only
-thing written into the project is the `.devops/` folder, which keeps itself out
-of git.
+or from anywhere with `mvn-devops -p ~/work/my-maven-project setup`. Two things
+are written into the project: `devops.conf`, the tools and answers to commit,
+and the `.devops/` folder with passwords, tokens and generated files, which
+keeps itself out of git.
 
 `setup` is the five steps below in order; each can also be run on its own.
 
 | Step | Command | What happens |
 |---|---|---|
-| 1 | `init` | Menu per category. Saves the choice in `.devops/profile.conf`. |
+| 1 | `init` | Menu per category. Saves the choice in `devops.conf`. |
 | 2 | `secrets` | Each selected module asks for the values it needs. Passwords default to random ones. |
 | 3 | `up` | Modules prepare (render config, keys), then `docker compose up` with every selected module's compose fragment. |
 | 4 | `configure` | Modules finish their tool: change default admin passwords, create tokens and repositories. |
@@ -300,11 +302,12 @@ devops.sh ── lib/  (menu, value store, env files, stages, compose)
          compose.yml    containers of the tool (optional)
 ```
 
-All state for a project is kept in `<project>/.devops/` (it git-ignores itself):
+The selected tools and every answer that is not a secret or personal are kept
+in `<project>/devops.conf`, which you commit. Everything else is kept in
+`<project>/.devops/` (it git-ignores itself):
 
 ```
 .devops/
-  profile.conf          selected modules
   values/<KEY>          one file per value, chmod 600
   env/pipeline.env      variables handed to the pipeline (compose env_file format)
   env/pipeline.sh       the same as bash exports

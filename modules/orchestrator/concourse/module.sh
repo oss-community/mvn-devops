@@ -17,7 +17,7 @@ module_secrets() {
   ask_server CONCOURSE Concourse https://ci.example.com
   if server_external CONCOURSE; then
     ask CONCOURSE_TEAM "Concourse team" main
-    ask CONCOURSE_USER "Concourse user (local user of the team)" admin
+    ask_local CONCOURSE_USER "Concourse user (local user of the team)" admin
     ask_secret CONCOURSE_PASSWORD "Password of $(value CONCOURSE_USER)"
     ask MAVEN_IMAGE "Docker image for build tasks" "$(build_image)"
     return

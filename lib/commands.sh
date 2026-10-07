@@ -81,9 +81,7 @@ cmd_init() {
     esac
   done
 
-  if profile_exists; then
-    # shellcheck disable=SC1090
-    source "$DEVOPS_PROFILE"
+  if profile_read; then
     read -r -a current <<< "${MODULES:-}"
   fi
   PROJECT_NAME=${name:-${PROJECT_NAME:-$(basename "$PROJECT_DIR")}}
@@ -127,7 +125,7 @@ cmd_init() {
   for id in $MODULES; do
     printf '  %-26s %s\n' "$id" "$(module_field "$id" MODULE_TITLE)"
   done
-  log_ok "Saved $DEVOPS_PROFILE"
+  log_ok "Saved $DEVOPS_CONF; commit it so the team gets the same tools"
   log_info "Next: '$DEVOPS_CMD setup' (or the single steps: secrets, up, configure, render, publish)."
 }
 
@@ -139,7 +137,7 @@ cmd_secrets() {
   load_project
   state_ensure_dirs
   log_step "Docker machine"
-  ask DEVOPS_HOST "Address of the machine Docker runs on, for the tools started in Docker" "$(docker_host_default)"
+  ask_local DEVOPS_HOST "Address of the machine Docker runs on, for the tools started in Docker" "$(docker_host_default)"
   modules_hook module_secrets
   env_generate
   log_ok "Values stored in $DEVOPS_VALUES"

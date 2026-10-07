@@ -52,7 +52,8 @@ configured) instead of during `configure`.
 ## Helpers
 
 ```bash
-ask KEY "Question" [default]          # stored in .devops/values/KEY; kept on later runs
+ask KEY "Question" [default]          # stored in .devops/values/KEY and shared through devops.conf
+ask_local KEY "Question" [default]    # same, but never shared: user names, addresses of this machine
 ask_secret KEY "Question" [default]   # hidden input, masked everywhere
 value KEY [fallback]                  # read a value
 require_value KEY                     # read or fail

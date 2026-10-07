@@ -53,15 +53,16 @@ for orchestrator in maven jenkins concourse; do
   printf 'ok  %s\n' "$orchestrator"
 done
 # Every tool on an existing server, GitHub Enterprise: no containers at all.
-rm -rf "$project/.devops"
+# The server URLs come from the committed devops.conf.
+rm -rf "$project/.devops" "$project/devops.conf"
 devops init --orchestrator jenkins --with sonarqube,nexus,jfrog,github-packages,github-pages > /dev/null
-values="$project/.devops/values"
-mkdir -p "$values"
-printf '%s' https://ghe.acme.test > "$values/GITHUB_URL"
-printf '%s' https://sonar.acme.test/ > "$values/SONAR_SERVER_URL"
-printf '%s' https://nexus.acme.test > "$values/NEXUS_SERVER_URL"
-printf '%s' https://acme.jfrog.test/artifactory > "$values/JFROG_SERVER_URL"
-printf '%s' https://jenkins.acme.test > "$values/JENKINS_SERVER_URL"
+cat >> "$project/devops.conf" <<'EOF'
+GITHUB_URL=https://ghe.acme.test
+SONAR_SERVER_URL=https://sonar.acme.test/
+NEXUS_SERVER_URL=https://nexus.acme.test
+JFROG_SERVER_URL=https://acme.jfrog.test/artifactory
+JENKINS_SERVER_URL=https://jenkins.acme.test
+EOF
 devops secrets > /dev/null
 devops render > /dev/null
 env_out=$(devops env --show)
@@ -78,6 +79,29 @@ grep -q "SONAR_URL = 'https://sonar.acme.test'" "$jenkinsfile" || fail "existing
 grep -q "credentialsId: 'demo-app-github-https'" "$jenkinsfile" || fail "existing jenkins: checkout credential"
 devops compose config --services 2>&1 | grep -q "No selected module needs containers" || fail "existing servers: no container expected"
 printf 'ok  existing servers\n'
+
+# devops.conf: the team's answers are committed, secrets and personal values are not.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with sonarqube,nexus > /dev/null
+devops secrets > /dev/null
+conf="$project/devops.conf"
+grep -qx 'ORCHESTRATOR=maven' "$conf" || fail "devops.conf: orchestrator missing"
+grep -qx 'NEXUS_HOST_PORT=8084' "$conf" || fail "devops.conf: shared answer missing"
+! grep -qE '^(DEVOPS_HOST|GITHUB_USERNAME|GITHUB_EMAIL)=' "$conf" || fail "devops.conf: personal value shared"
+! grep -qE '^[A-Z_]*(PASSWORD|TOKEN)=' "$conf" || fail "devops.conf: secret shared"
+sed -i 's/^NEXUS_HOST_PORT=.*/NEXUS_HOST_PORT=9184/' "$conf"
+rm -rf "$project/.devops"   # a fresh clone: no local state, no init
+devops secrets > /dev/null
+[[ $(devops get NEXUS_HOST_PORT) == 9184 ]] || fail "devops.conf: answer not used on a fresh clone"
+env_out=$(devops env --show)
+grep -q '^NEXUS_ARTIFACTORY_HOST_URL=http://localhost:9184$' <<< "$env_out" || fail "devops.conf: answer not in the pipeline"
+# A project set up with 1.0.0 keeps working: profile.conf moves to devops.conf.
+rm -f "$conf"
+printf "PROJECT_NAME=demo-app\nORCHESTRATOR=maven\nMODULES='scm/github build/maven orchestrator/maven'\n" > "$project/.devops/profile.conf"
+devops stages > /dev/null
+grep -qx 'MODULES=scm/github build/maven orchestrator/maven' "$conf" || fail "devops.conf: profile.conf not moved"
+[[ ! -f "$project/.devops/profile.conf" ]] || fail "devops.conf: profile.conf left behind"
+printf 'ok  devops.conf\n'
 
 # release: next development version
 # shellcheck source=../lib/release.sh

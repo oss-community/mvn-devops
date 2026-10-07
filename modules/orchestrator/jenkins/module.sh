@@ -21,7 +21,7 @@ module_secrets() {
   if server_external JENKINS; then
     log_dim "  Agents need git, ssh, Java $(value JAVA_VERSION 21) and Maven $(value MAVEN_VERSION 3.9); the server needs the plugins workflow-aggregator,"
     log_dim "  git, credentials-binding, plain-credentials and timestamper."
-    ask JENKINS_ADMIN_USER "Jenkins user that may create jobs and credentials" admin
+    ask_local JENKINS_ADMIN_USER "Jenkins user that may create jobs and credentials" admin
     ask_secret JENKINS_API_TOKEN "API token of $(value JENKINS_ADMIN_USER) (user menu > Security > API Token)"
   else
     ask JENKINS_HOST_PORT "Jenkins port on the Docker machine" 8080

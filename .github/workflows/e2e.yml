@@ -21,7 +21,10 @@ jobs:
       matrix:
         include:
           - orchestrator: maven
-            with: sonarqube,nexus,jfrog
+            with: sonarqube,nexus
+          # Setup only: Artifactory OSS repositories need its Quick Setup wizard.
+          - orchestrator: maven
+            with: jfrog
           - orchestrator: jenkins
             with: sonarqube,nexus
           - orchestrator: concourse

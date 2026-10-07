@@ -203,11 +203,15 @@ ask_secret() {
   set_value "$key" "$answer" secret
 }
 
-# A random password that satisfies the usual complexity rules.
+# A random password that satisfies the usual complexity rules.  Reads a fixed
+# number of bytes: a tr reading /dev/urandom never ends where SIGPIPE is
+# ignored (it is on macOS GitHub runners).
 random_password() {
-  local raw
-  raw=$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 16 || true)
-  printf 'Dv-%sa1' "$raw"
+  local raw=''
+  while (( ${#raw} < 16 )); do
+    raw+=$(head -c 256 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9')
+  done
+  printf 'Dv-%sa1' "${raw:0:16}"
 }
 
 # ---------------------------------------------------------------- env files

@@ -33,6 +33,8 @@ GitHub release.
 ### Fixed
 
 - Docker on Windows got Git Bash paths in compose files and their `.env`.
+- `doctor` missed CRLF files on Windows, whose grep hides the CR.
+- Generating a password could hang on macOS where SIGPIPE is ignored.
 
 ## 1.0.0
 

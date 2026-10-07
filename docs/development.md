@@ -12,8 +12,10 @@ tests/e2e.sh maven sonarqube,nexus   # real tools in Docker: setup, the whole pi
 workflow. `tests/e2e.sh` builds [examples/hello-maven](../examples/hello-maven)
 with each orchestrator in the `e2e` workflow, on every push to `main` and once a
 week; it serves the project from a local git server, so it needs no GitHub
-token. Run it locally with Docker and internet access; `E2E_KEEP=1` leaves the
-containers running for a look.
+token. With `jfrog` it checks the setup only, because Artifactory OSS
+repositories have to be created in its Quick Setup wizard. Run it locally with
+Docker and internet access; `E2E_KEEP=1` leaves the containers running for a
+look.
 
 ## Releasing mvn-devops
 

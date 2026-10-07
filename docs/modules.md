@@ -10,7 +10,7 @@
 | Project site | any | `github-pages` |
 | Container image | one or none | `docker-registry`, `github-container` |
 | Image security | any | `trivy`, `syft`, `cosign` |
-| Deployment | one or none | `docker-host` |
+| Deployment | one or none | `docker-host`, `kubernetes` |
 
 **Artifactory OSS** does not allow creating repositories through its API.
 After `configure`, open Artifactory, choose Quick Setup > Maven and enter the

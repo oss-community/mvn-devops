@@ -42,8 +42,13 @@ GitHub release.
   (SPDX and CycloneDX), Cosign signs it with a project key, attests the SBOM
   and checks the signature before production. Signatures stay in the
   registry; the public Sigstore services are not used.
+- Deployment to Kubernetes (`kubernetes`) with Helm 4: rolling updates that
+  wait for the readiness probe and roll back on failure, staging and
+  production namespaces, `rollback` through Helm's history. The cluster is an
+  existing one (kubeconfig) or k3s in Docker. A generic chart
+  (`templates/helm/app`) is used unless the project has its own.
 - `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft
-  1.54.1, Cosign 3.1.3) where the pipeline runs, checked against their
+  1.54.1, Cosign 3.1.3, Helm 4.3.0) where the pipeline runs, checked against their
   release checksums and cached in `~/.cache/mvn-devops/tools`.
 
 ### Changed

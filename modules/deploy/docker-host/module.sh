@@ -125,9 +125,8 @@ module_configure() {
 }
 
 module_env() {
-  local env target name key
-  name=$(value IMAGE_NAME "$PROJECT_NAME")
-  pipeline_var DEPLOY_NAME "$(printf '%s' "${name//\//-}" | tr '[:upper:]' '[:lower:]')"
+  local env target key
+  pipeline_var DEPLOY_NAME "$(image_app_name)"
   for env in $ENVIRONMENTS; do
     target=$(ssh_target "$env" pipeline)
     pipeline_var "DEPLOY_$(upper "$env")_TARGET" "${target%% *}"

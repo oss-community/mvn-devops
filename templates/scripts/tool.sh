@@ -1,8 +1,8 @@
 #!/bin/sh
 # Prints the path of a pinned command line tool, downloading it from its
-# GitHub release on first use and checking it against the release checksums.
+# official release on first use and checking it against the release checksums.
 #
-#   tool.sh <trivy|syft|cosign>
+#   tool.sh <trivy|syft|cosign|helm>
 #
 # Tools are cached in $DEVOPS_TOOLS (default ~/.cache/mvn-devops/tools), one
 # directory per version.  <NAME>_VERSION overrides a version, e.g.
@@ -22,7 +22,7 @@ case $(uname -m) in
   aarch64 | arm64) arch=arm64 ;;
   *) echo "tool.sh: unsupported architecture $(uname -m)" >&2; exit 1 ;;
 esac
-exe=''
+exe='' member=''
 [ $os = windows ] && exe=.exe
 github=${DEVOPS_RELEASES_MIRROR:-https://github.com}
 
@@ -46,6 +46,13 @@ case $name in
     url=$github/sigstore/cosign/releases/download/v$version
     asset=cosign-$os-$arch$exe
     sums=cosign_checksums.txt ;;
+  helm)
+    version=${HELM_VERSION:-4.3.0}
+    ext=tar.gz; [ $os = windows ] && ext=zip
+    url=${DEVOPS_HELM_MIRROR:-https://get.helm.sh}
+    asset=helm-v$version-$os-$arch.$ext
+    sums=$asset.sha256sum
+    member=$os-$arch/helm$exe ;;
   *) echo "tool.sh: unknown tool $name" >&2; exit 1 ;;
 esac
 
@@ -58,7 +65,7 @@ if [ ! -x "$bin" ]; then
   echo "Downloading $name $version" >&2
   curl -fsSL -o "$tmp/$asset" "$url/$asset"
   curl -fsSL -o "$tmp/sums" "$url/$sums"
-  expected=$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1 }' "$tmp/sums")
+  expected=$(awk -v f="$asset" '$2 == f || $2 == "*" f || NF == 1 { print $1; exit }' "$tmp/sums")
   if command -v sha256sum > /dev/null; then
     actual=$(sha256sum "$tmp/$asset" | awk '{ print $1 }')
   else
@@ -68,11 +75,13 @@ if [ ! -x "$bin" ]; then
     echo "tool.sh: checksum of $asset does not match $sums" >&2
     exit 1
   fi
+  member=${member:-$name$exe}
   case $asset in
-    *.tar.gz) tar -xzf "$tmp/$asset" -C "$tmp" "$name" ;;
-    *.zip) unzip -q -o "$tmp/$asset" "$name$exe" -d "$tmp" ;;
-    *) mv "$tmp/$asset" "$tmp/$name$exe" ;;
+    *.tar.gz) tar -xzf "$tmp/$asset" -C "$tmp" "$member" ;;
+    *.zip) unzip -q -o "$tmp/$asset" "$member" -d "$tmp" ;;
+    *) mv "$tmp/$asset" "$tmp/$member" ;;
   esac
+  [ "$member" = "$name$exe" ] || mv "$tmp/$member" "$tmp/$name$exe"
   chmod +x "$tmp/$name$exe"
   mv "$tmp/$name$exe" "$bin"
 fi

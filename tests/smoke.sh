@@ -118,8 +118,8 @@ for orchestrator in maven jenkins concourse; do
   grep -q '^IMAGE_DEPLOY_REPOSITORY=localhost:5000/demo-app$' <<< "$env_out" || fail "image: $orchestrator deploy repository"
   case $orchestrator in
     maven) grep -q "^DEVOPS_SCRIPTS=$ROOT/templates/scripts$" <<< "$env_out" || fail "image: maven DEVOPS_SCRIPTS" ;;
-    jenkins) grep -q '\.devops/scripts/image-dockerfile\.sh' "$project/.devops/generated/Jenkinsfile" || fail "image: jenkins scripts" ;;
-    concourse) grep -q '\.devops/scripts/image-dockerfile\.sh' "$project/.devops/generated/concourse/pipeline.yml" || fail "image: concourse scripts" ;;
+    jenkins) grep -q 'base64 -d | tar -xzf - -C .devops' "$project/.devops/generated/Jenkinsfile" || fail "image: jenkins scripts" ;;
+    concourse) grep -q 'base64 -d | tar -xzf - -C .devops' "$project/.devops/generated/concourse/pipeline.yml" || fail "image: concourse scripts" ;;
   esac
 done
 # Deployment: staging in cd, production in prod behind an approval.
@@ -150,6 +150,22 @@ for orchestrator in maven jenkins concourse; do
   [[ $(devops env --show | grep '^DEPLOY_STAGING_TARGET=') == "DEPLOY_STAGING_TARGET=root@$( [[ $orchestrator == maven ]] && echo localhost || echo deploy-host)" ]] \
     || fail "deploy: $orchestrator reaches the simulated machine at the wrong address"
 done
+# Kubernetes: the same stages with Helm; the pipeline reaches k3s by its service name.
+for orchestrator in maven jenkins; do
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --orchestrator "$orchestrator" --with docker-registry,kubernetes > /dev/null
+  devops secrets > /dev/null
+  stages=$(devops stages)
+  grep -q 'deploy-helm.sh" staging' <<< "$stages" || fail "kubernetes: $orchestrator has no staging stage"
+  grep -q '^90 *prod *deploy-production .*deploy-helm.sh" production' <<< "$stages" || fail "kubernetes: $orchestrator production"
+  mkdir -p "$project/.devops/k3s"
+  printf 'apiVersion: v1\nclusters:\n- cluster:\n    server: https://127.0.0.1:6443\n' > "$project/.devops/k3s/kubeconfig.yaml"
+  server=$(devops env --show > /dev/null; base64 -d < <(sed -n 's/^export KUBECONFIG_B64=//p' "$project/.devops/env/pipeline.sh" | tr -d "'") | sed -n 's/ *server: //p')
+  expected=https://localhost:6443; [[ $orchestrator == jenkins ]] && expected=https://k3s:6443
+  [[ $server == "$expected" ]] || fail "kubernetes: $orchestrator reaches the API at '$server'"
+done
+printf 'ok  kubernetes\n'
+! devops init --orchestrator maven --with docker-host,kubernetes > /dev/null 2>&1 || fail "deploy: two deployment modules accepted"
 ! devops init --orchestrator maven --with docker-registry,github-container > /dev/null 2>&1 || fail "image: two image modules accepted"
 rm -rf "$project/.devops" "$project/devops.conf"
 devops init --orchestrator maven --with docker-host > /dev/null

@@ -38,6 +38,10 @@ offers:
 The production stages deploy the commit that passed staging; they do not build
 it again.
 
+Stage scripts (`templates/scripts`) and the Helm chart (`templates/helm`) reach
+Jenkins and Concourse as a compressed copy in the generated pipeline, unpacked
+into `.devops/` of the checkout before the first stage.
+
 All orchestrators use the same Java and Maven, set with `JAVA_VERSION` (21)
 and `MAVEN_VERSION` (3.9) in `secrets`. Java 21 also builds projects whose pom
 targets an older release such as 17.
@@ -55,6 +59,7 @@ Every tool runs from its official image, unchanged:
 | Concourse build tasks | `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>` |
 | Docker registry | `registry:3` |
 | Simulated deploy machine | built from `docker:cli` with openssh-server and curl |
+| Kubernetes | `rancher/k3s:v1.37.1-k3s1` (`K3S_IMAGE_TAG`) |
 
 Jenkins is the one exception. The official `jenkins/jenkins` image has Java but
 no Maven, and the pipeline stages are `mvn` commands run inside Jenkins. So

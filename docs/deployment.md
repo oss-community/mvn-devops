@@ -150,3 +150,55 @@ registry under its commit tag, so `--to` can go further back.
 
 Each deployment replaces the container, so the application is down for the
 few seconds it takes to start. Zero-downtime updates come with Kubernetes.
+
+## Deploying to Kubernetes
+
+The `kubernetes` module (*Deployment* category) installs the application with
+Helm, one release per environment:
+
+| Stage | Phase | What happens |
+|---|---|---|
+| `deploy-staging` (80) | cd | `helm upgrade --install` in the namespace `<app>-staging` |
+| `deploy-production` (90) | prod | the same in `<app>-production`, after the approval |
+
+Helm waits until the new pods pass their readiness probe (the health path).
+The update is rolling: a new pod must be ready before an old one stops, so the
+application stays up. When the new version does not become ready within
+`KUBERNETES_TIMEOUT` (5m), Helm rolls the release back and the stage fails.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `KUBERNETES_SERVER_URL` | empty | an existing cluster; empty: k3s in Docker |
+| `KUBERNETES_KUBECONFIG` | `~/.kube/config` | kubeconfig of the existing cluster, passed to the pipeline as a secret |
+| `KUBERNETES_STAGING_PORT`, `KUBERNETES_PRODUCTION_PORT` | 8281, 8280 | k3s: the application on this machine |
+| `KUBERNETES_STAGING_NODE_PORT`, `KUBERNETES_PRODUCTION_NODE_PORT` | 30081, 30080 with k3s | node port of the service; empty: a ClusterIP service for your ingress |
+| `KUBERNETES_CHART` | empty | the project's own chart, e.g. `deploy/chart`; empty: the generic chart |
+| `KUBERNETES_REPLICAS` | 2 | pods per environment |
+| `DEPLOY_HEALTH_PATH` | `/actuator/health` | readiness and liveness probe |
+
+**The generic chart** ([templates/helm/app](../templates/helm/app)) has a
+Deployment with readiness and liveness probes, resource requests, a rolling
+update strategy and a Service. The container gets `DEPLOY_ENVIRONMENT`, and
+every key of the Secret `<app>-env` in its namespace when it exists:
+
+```bash
+kubectl --namespace hello-api-production create secret generic hello-api-env --from-literal=GREETING=hello
+```
+
+A private registry gets an image pull secret from the registry credentials.
+**A chart of your own** receives the same values: `image.repository`,
+`image.tag`, `registryAuth`, `environment`, `replicas`, `containerPort`,
+`healthPath` and `service.nodePort`.
+
+**k3s in Docker** is a one-node cluster on your machine. It pulls from the
+local registry through its service name, so the image reference stays
+`localhost:5000/<image>`. Use it from your machine with:
+
+```bash
+export KUBECONFIG=.devops/k3s/kubeconfig-host.yaml
+kubectl get pods --namespace hello-api-staging
+curl http://localhost:8281/hello
+```
+
+`devops.sh rollback` goes back to the previous Helm revision (`helm rollback`);
+`--to TAG` deploys an earlier image again.

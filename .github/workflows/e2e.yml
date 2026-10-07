@@ -35,6 +35,12 @@ jobs:
             with: docker-registry,docker-host,trivy,syft,cosign
           - orchestrator: concourse
             with: docker-registry,docker-host,trivy,syft,cosign
+          - orchestrator: maven
+            with: docker-registry,kubernetes
+          - orchestrator: jenkins
+            with: docker-registry,kubernetes
+          - orchestrator: concourse
+            with: docker-registry,kubernetes
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

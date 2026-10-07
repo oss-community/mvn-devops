@@ -45,6 +45,14 @@ image_env() {
   pipeline_var IMAGE_DIGEST_FILE "${module:+$module/}target/jib-image.digest"
 }
 
+# Name of the deployed application (compose project, Helm release, namespace
+# prefix): the image name without registry namespace separators.
+image_app_name() {
+  local name
+  name=$(value IMAGE_NAME "$PROJECT_NAME")
+  printf '%s' "${name//\//-}" | tr '[:upper:]' '[:lower:]'
+}
+
 # Modules that work on the image (deployment, security) need an image module.
 require_image_module() {
   [[ " $MODULES " == *" image/"* ]] \

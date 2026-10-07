@@ -1,0 +1,32 @@
+# Values of the chart mvn-devops deploys when a project has none of its own
+# (KUBERNETES_CHART).  The deploy step sets image, environment and the
+# service port for each environment.
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Registry login for private images, as a dockerconfigjson document.
+registryAuth: ""
+
+replicas: 2
+environment: ""
+containerPort: 8080
+healthPath: /actuator/health
+
+service:
+  port: 80
+  # A fixed node port makes the application reachable on every node; empty
+  # gives a ClusterIP service.
+  nodePort: ""
+
+# Extra environment variables of the container.
+env: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

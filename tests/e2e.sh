@@ -21,7 +21,7 @@ mkdir -p "$WORK"
 HOST_IP=${E2E_HOST_IP:-$(hostname -I | awk '{ print $1 }')}
 GIT_PORT=${E2E_GIT_PORT:-8765}
 case ,$WITH, in
-  *,docker-registry,*) EXAMPLE=${E2E_EXAMPLE:-hello-api} ;;
+  *,docker-registry,* | *,github-container,*) EXAMPLE=${E2E_EXAMPLE:-hello-api} ;;
   *) EXAMPLE=${E2E_EXAMPLE:-hello-maven} ;;
 esac
 
@@ -140,19 +140,28 @@ if [[ ,$WITH, == *,cosign,* ]]; then
   fi
   printf 'ok  %s is signed\n' "$image"
 fi
-if [[ ,$WITH, == *,docker-host,* ]]; then
+if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
   # app_check <environment>: prints the tag that runs and checks the answer.
   app_check() {
-    local port answer
-    port=$(devops get "DEPLOY_$(tr '[:lower:]' '[:upper:]' <<< "$1")_PORT")
+    local env_upper port answer image
+    env_upper=$(tr '[:lower:]' '[:upper:]' <<< "$1")
+    if [[ ,$WITH, == *,kubernetes,* ]]; then
+      port=$(devops get "KUBERNETES_${env_upper}_PORT")
+      image=$(devops compose exec -T k3s kubectl get deployment "$(devops get IMAGE_NAME)" \
+        --namespace "$(devops get IMAGE_NAME)-$1" --output 'jsonpath={.spec.template.spec.containers[0].image}')
+    else
+      port=$(devops get "DEPLOY_${env_upper}_PORT")
+      image=$(docker inspect --format '{{.Config.Image}}' "$(devops get IMAGE_NAME)-$1-app-1")
+    fi
     answer=$(curl -fsS "http://localhost:$port/hello?name=e2e") || fail "$1 does not answer on port $port"
     jq -e --arg env "$1" '.environment == $env' <<< "$answer" > /dev/null || fail "$1 answers $answer"
-    docker inspect --format '{{.Config.Image}}' "$(devops get IMAGE_NAME)-$1-app-1" | sed 's/.*://'
+    printf '%s\n' "${image##*:}"
   }
+  prod_port=$(devops get DEPLOY_PRODUCTION_PORT 2> /dev/null || devops get KUBERNETES_PRODUCTION_PORT)
   first=$(git -C "$project" rev-parse --short=12 HEAD)
   [[ $(app_check staging) == "$first" ]] || fail "staging does not run $first"
   printf 'ok  staging runs %s\n' "$first"
-  ! curl -fsS -o /dev/null "http://localhost:$(devops get DEPLOY_PRODUCTION_PORT)/actuator/health" 2> /dev/null \
+  ! curl -fsS -o /dev/null "http://localhost:$prod_port/actuator/health" 2> /dev/null \
     || fail "production was deployed without approval"
   printf 'ok  production waits for the approval\n'
 

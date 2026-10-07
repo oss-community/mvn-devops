@@ -25,8 +25,8 @@ image_secrets() {
   ask IMAGE_BUILDER "Build the image with jib or with the project's dockerfile" "$builder"
   if [[ $(value IMAGE_BUILDER jib) == jib ]]; then
     ask IMAGE_BASE "Base image" "eclipse-temurin:$(value JAVA_VERSION 21)-jre"
-    ask IMAGE_PORT "Port the application listens on" 8080
   fi
+  ask IMAGE_PORT "Port the application listens on in the container" 8080
 }
 
 # image_env <push repository> <deploy repository> [user] [password]

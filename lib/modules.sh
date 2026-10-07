@@ -8,7 +8,7 @@
 #   compose.yml   optional docker compose fragment
 #
 # A category directory holds category.conf with CATEGORY_TITLE, CATEGORY_ORDER
-# and CATEGORY_MODE (required | single | multi).
+# and CATEGORY_MODE (required | single | optional | multi).
 
 DEVOPS_MODULES_DIR="$DEVOPS_HOME/modules"
 

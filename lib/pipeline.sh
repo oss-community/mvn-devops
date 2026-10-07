@@ -6,7 +6,8 @@
 #   stage <order> <phase> <name> "<maven arguments>"
 #
 #   order  number, stages run in ascending order
-#   phase  ci (build, verify) or cd (publish, deploy)
+#   phase  ci (build, verify), cd (publish, deploy to staging) or prod
+#          (deploy to production; runs only after someone approves it)
 #   name   short id, letters, digits and dashes
 #   args   arguments passed to mvn; may use $VARS from the pipeline env
 #
@@ -22,7 +23,7 @@ stage() {
   local order=$1 phase=$2 name=$3 args=$4
   [[ -n ${STAGES_FILE:-} ]] || die "stage used outside module_stages"
   [[ $order =~ ^[0-9]+$ ]] || die "stage '$name': order must be a number"
-  [[ $phase == ci || $phase == cd ]] || die "stage '$name': phase must be ci or cd"
+  [[ $phase == ci || $phase == cd || $phase == prod ]] || die "stage '$name': phase must be ci, cd or prod"
   [[ $name =~ ^[a-z0-9-]+$ ]] || die "stage '$name': use lowercase letters, digits and dashes"
   # Arguments are embedded in single-quoted strings by the orchestrators.
   case $args in
@@ -78,6 +79,9 @@ maven_flags() {
   [[ -n $profiles ]] && flags+=" -P $profiles"
   printf '%s' "$flags"
 }
+
+# True when a stage waits for the production approval.
+pipeline_has_prod() { pipeline_stages | grep -q '^[0-9]*|prod|'; }
 
 pipeline_print() {
   local order phase name args

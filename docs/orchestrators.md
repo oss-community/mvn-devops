@@ -23,6 +23,21 @@ The pipeline has a `ci` job, triggered by every push, and a `cd` job that runs
 all stages and is started by hand after `ci` passed. Tasks run in
 `maven:3.9-eclipse-temurin-21`. `fly` is downloaded from the server.
 
+## Production approval
+
+Stages in the `prod` phase (the production deployment of the `docker-host`
+module) run only after someone approves them, in the way each orchestrator
+offers:
+
+| Orchestrator | Waiting | Approve with |
+|---|---|---|
+| maven | `run` stops after the cd stages | `devops.sh run --phase prod` |
+| jenkins | the build stops at the `approve-production` stage (an `input` step, kept for 7 days) | `devops.sh run --phase prod`, or *Deploy* in the build |
+| concourse | the `prod` job, after `cd` passed | `devops.sh run --phase prod`, or the job's + button |
+
+The production stages deploy the commit that passed staging; they do not build
+it again.
+
 All orchestrators use the same Java and Maven, set with `JAVA_VERSION` (21)
 and `MAVEN_VERSION` (3.9) in `secrets`. Java 21 also builds projects whose pom
 targets an older release such as 17.
@@ -38,6 +53,8 @@ Every tool runs from its official image, unchanged:
 | Artifactory OSS | `releases-docker.jfrog.io/jfrog/artifactory-oss` (with `postgres:18`) |
 | Concourse | `concourse/concourse` (with `postgres:18`) |
 | Concourse build tasks | `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>` |
+| Docker registry | `registry:3` |
+| Simulated deploy machine | built from `docker:cli` with openssh-server and curl |
 
 Jenkins is the one exception. The official `jenkins/jenkins` image has Java but
 no Maven, and the pipeline stages are `mvn` commands run inside Jenkins. So

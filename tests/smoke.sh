@@ -122,6 +122,40 @@ for orchestrator in maven jenkins concourse; do
     concourse) grep -q '\.devops/scripts/image-dockerfile\.sh' "$project/.devops/generated/concourse/pipeline.yml" || fail "image: concourse scripts" ;;
   esac
 done
+# Deployment: staging in cd, production in prod behind an approval.
+for orchestrator in maven jenkins concourse; do
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --orchestrator "$orchestrator" --with docker-registry,docker-host > /dev/null
+  devops secrets > /dev/null
+  stages=$(devops stages)
+  grep -q '^80 *cd *deploy-staging ' <<< "$stages" || fail "deploy: $orchestrator has no staging stage"
+  grep -q '^90 *prod *deploy-production ' <<< "$stages" || fail "deploy: $orchestrator has no production stage"
+  devops render > /dev/null
+  case $orchestrator in
+    maven)
+      run_out=$(devops run --dry-run 2>&1)
+      grep -q 'deploy-staging' <<< "$run_out" || fail "deploy: maven does not deploy to staging"
+      ! grep -q '\] deploy-production' <<< "$run_out" || fail "deploy: maven deploys to production without approval"
+      run_out=$(devops run --dry-run --phase prod 2>&1)
+      grep -q 'deploy-production' <<< "$run_out" || fail "deploy: maven --phase prod" ;;
+    jenkins)
+      jenkinsfile="$project/.devops/generated/Jenkinsfile"
+      grep -q "input id: 'Production'" "$jenkinsfile" || fail "deploy: jenkins has no approval"
+      [[ $(grep -n "approve-production" "$jenkinsfile" | cut -d: -f1) -lt $(grep -n "stage('deploy-production')" "$jenkinsfile" | cut -d: -f1) ]] \
+        || fail "deploy: jenkins approval is not before production" ;;
+    concourse)
+      grep -q 'name: prod' "$project/.devops/generated/concourse/pipeline.yml" || fail "deploy: concourse has no prod job"
+      grep -q 'passed: \[cd\]' "$project/.devops/generated/concourse/pipeline.yml" || fail "deploy: concourse prod job does not follow cd" ;;
+  esac
+  [[ $(devops env --show | grep '^DEPLOY_STAGING_TARGET=') == "DEPLOY_STAGING_TARGET=root@$( [[ $orchestrator == maven ]] && echo localhost || echo deploy-host)" ]] \
+    || fail "deploy: $orchestrator reaches the simulated machine at the wrong address"
+done
+! devops init --orchestrator maven --with docker-registry,github-container > /dev/null 2>&1 || fail "image: two image modules accepted"
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with docker-host > /dev/null
+! devops secrets > /dev/null 2>&1 || fail "deploy: accepted without an image module"
+printf 'ok  deploy\n'
+
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"
 rm -rf "$project/.devops" "$project/devops.conf"

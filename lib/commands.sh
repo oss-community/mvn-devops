@@ -31,7 +31,11 @@ menu_pick() {
 
   {
     printf '\n%s%s%s' "$C_BOLD" "$title" "$C_RESET"
-    [[ $mode == single ]] && printf ' (choose one)\n' || printf ' (choose any, comma separated, 0 for none)\n'
+    case $mode in
+      single) printf ' (choose one)\n' ;;
+      optional) printf ' (choose one, 0 for none)\n' ;;
+      *) printf ' (choose any, comma separated, 0 for none)\n' ;;
+    esac
     for i in "${!options[@]}"; do
       id=${options[$i]}
       printf '  %d) %-16s %s\n' $((i + 1)) "${id#*/}" "$(module_field "$id" MODULE_DESCRIPTION)"
@@ -61,6 +65,7 @@ menu_pick() {
       fi
     done
     if [[ $mode == single ]] && (( ${#picked[@]} != 1 )); then ok=0; fi
+    if [[ $mode == optional ]] && (( ${#picked[@]} > 1 )); then ok=0; fi
     (( ok )) && break
     log_warn "Invalid choice '$answer'."
     [[ ${DEVOPS_DEFAULTS:-0} == 1 ]] && die "Default selection for $title is invalid"
@@ -104,6 +109,9 @@ cmd_init() {
     for category in $(categories); do
       conf=$(category_conf "$category")
       [[ ${conf%%|*} == required ]] && mapfile -t -O "${#selected[@]}" selected < <(category_modules "$category")
+      if [[ ${conf%%|*} == optional ]] && (( $(printf '%s\n' "${selected[@]}" | grep -c "^$category/") > 1 )); then
+        die "Choose only one module of '${conf#*|}'"
+      fi
     done
   else
     for category in $(categories); do
@@ -248,6 +256,21 @@ cmd_setup() {
 }
 
 # ---------------------------------------------------------------- operations
+
+# rollback [environment] [--to TAG]: the deploy module puts back the previous
+# image (or the given tag) in the environment, production by default.
+cmd_rollback() {
+  load_project
+  env_generate
+  local id done=0
+  for id in $MODULES; do
+    if module_has_hook "$id" module_rollback; then
+      module_hook "$id" module_rollback "$@"
+      done=1
+    fi
+  done
+  (( done )) || die "No selected module deploys the application. See '$DEVOPS_CMD modules'."
+}
 
 cmd_status() {
   load_project

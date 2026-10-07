@@ -62,7 +62,9 @@ Setup
 Pipeline
   stages       show the stages contributed by the selected tools
   render       generate the pipeline files into .devops/generated
-  run          run the pipeline  (maven: [--dry-run] [--from s] [--only s] [--phase ci|cd])
+  run          run the pipeline  (maven: [--dry-run] [--from s] [--only s] [--phase ci|cd|prod])
+                 --phase prod   approve and run the production stages
+  rollback     put the previous image back  [staging|production] [--to TAG]
   release      release version, deploy, next snapshot, push
                  [--version X] [--next Y-SNAPSHOT] [--dry-run] [--no-push]
 
@@ -108,7 +110,7 @@ main() {
 
   local command=$1; shift
   case $command in
-    init|setup|secrets|up|configure|publish|stages|render|run|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release|upgrade)
+    init|setup|secrets|up|configure|publish|stages|render|run|rollback|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release|upgrade)
       "cmd_$command" "$@" ;;
     export-compose) cmd_export_compose "$@" ;;
     help) usage ;;

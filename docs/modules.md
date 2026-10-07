@@ -8,7 +8,8 @@
 | Code quality | any | `sonarqube` |
 | Artifact repositories | any | `jfrog`, `nexus`, `github-packages` |
 | Project site | any | `github-pages` |
-| Container image | one | `docker-registry`, `github-container` |
+| Container image | one or none | `docker-registry`, `github-container` |
+| Deployment | one or none | `docker-host` |
 
 **Artifactory OSS** does not allow creating repositories through its API.
 After `configure`, open Artifactory, choose Quick Setup > Maven and enter the
@@ -33,6 +34,8 @@ ORDER  PHASE STAGE            MAVEN ARGUMENTS
 71     cd   deploy-github    ... -DaltSnapshotDeploymentRepository=github::$GITHUB_PACKAGES_URL ...
 72     cd   deploy-nexus     ... -DaltSnapshotDeploymentRepository=nexus-snapshots::$NEXUS_ARTIFACTORY_SNAPSHOT_URL ...
 75     cd   image            package -DskipTests=true jib-maven-plugin:3.5.2:build -Djib.to.image=$IMAGE_REPOSITORY:$(git rev-parse --short=12 HEAD) ...
+80     cd   deploy-staging   (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" staging
+90     prod deploy-production (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" production
 ```
 
 **The project's pom.xml needs no profiles, no distributionManagement and no

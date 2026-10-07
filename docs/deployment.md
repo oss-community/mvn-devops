@@ -57,3 +57,66 @@ Check the result:
 curl -s http://localhost:5000/v2/hello-api/tags/list
 docker run --rm -p 8080:8080 localhost:5000/hello-api:latest
 ```
+
+## Deploying to a machine
+
+The `docker-host` module (*Deployment* category) runs the image with Docker
+Compose on a machine it reaches over SSH:
+
+| Stage | Phase | What happens |
+|---|---|---|
+| `deploy-staging` (80) | cd | deploys the image of the commit to staging |
+| `deploy-production` (90) | prod | the same image to production, after the approval ([orchestrators.md](orchestrators.md#production-approval)) |
+
+Each deployment:
+
+1. writes `compose.yml` and the tag to `~/mvn-devops/<image name>-<environment>/`
+   on the machine and runs `docker compose up`;
+2. calls the health endpoint (`DEPLOY_HEALTH_PATH`, default
+   `/actuator/health`) for up to two minutes;
+3. when it does not answer, puts back the image that ran before and fails the
+   stage.
+
+The container gets `DEPLOY_ENVIRONMENT` (`staging` or `production`). Settings
+and secrets of an environment go in `app.env` in that directory on the
+machine; it is never overwritten.
+
+### The machines
+
+| Question | Default | Meaning |
+|---|---|---|
+| `DEPLOY_SERVER_URL` | empty | staging machine, e.g. `ssh://deploy@staging.example.com:22`; empty: a simulated machine in Docker |
+| `DEPLOY_PRODUCTION_SERVER_URL` | the staging machine | production machine |
+| `DEPLOY_SSH_KEY_FILE` | empty | private key that may log in; empty: `setup` generates `.devops/keys/deploy` |
+| `DEPLOY_STAGING_PORT`, `DEPLOY_PRODUCTION_PORT` | 8181, 8180 | port of the application on the machine |
+| `DEPLOY_HEALTH_PATH` | `/actuator/health` | health check |
+
+A real machine needs Docker with the compose plugin, curl or wget, and a user
+in the `docker` group whose `~/.ssh/authorized_keys` holds the public key
+(`devops.sh get DEPLOY_SSH_PUBLIC_KEY`). `configure` records the machines' SSH
+host keys, which the pipeline then checks, and tells you when the key cannot
+log in yet. The machine pulls `IMAGE_DEPLOY_REPOSITORY`, logging in with the
+registry user when there is one.
+
+**The simulated machine** is a container with an SSH server and the Docker
+CLI, using the Docker daemon of your machine. The applications it starts are
+ordinary containers on your machine:
+
+```bash
+curl http://localhost:8181/hello     # staging
+curl http://localhost:8180/hello     # production
+```
+
+### Rollback
+
+```bash
+devops.sh rollback                     # production: the image that ran before
+devops.sh rollback staging
+devops.sh rollback production --to 3f2a9c1d4e5b
+```
+
+Rolling back twice returns to where you started. Every image stays in the
+registry under its commit tag, so `--to` can go further back.
+
+Each deployment replaces the container, so the application is down for the
+few seconds it takes to start. Zero-downtime updates come with Kubernetes.

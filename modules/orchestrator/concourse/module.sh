@@ -2,11 +2,12 @@
 # Concourse orchestrator.
 #
 # render  writes generated/concourse/pipeline.yml and vars.yml.  Job "ci" runs
-#         the ci stages on every push; job "cd" runs all stages and is started
-#         by hand once ci passed.
+#         the ci stages on every push; job "cd" runs the ci and cd stages and is
+#         started by hand once ci passed; job "prod" runs the production stages
+#         and is started by hand (the approval) once cd passed.
 # publish downloads fly from the server and sets the pipeline.  The server is
 #         started in Docker, or an existing one (CONCOURSE_SERVER_URL).
-# run     triggers a job and watches it:  run [--phase ci|cd]
+# run     triggers a job and watches it:  run [--phase ci|cd|prod]
 
 pipeline_name() { printf '%s' "$PROJECT_NAME"; }
 concourse_url() { server_url CONCOURSE "$(value CONCOURSE_HOST_PORT 8083)"; }
@@ -35,18 +36,19 @@ build_image() { printf 'maven:%s-eclipse-temurin-%s' "$(value MAVEN_VERSION 3.9)
 
 yaml_quote() { local v=${1//\'/\'\'}; printf "'%s'" "$v"; }
 
-# render_job <ci|cd>: the ci job runs ci stages, the cd job runs all stages.
+# render_job <ci|cd|prod>: the ci job runs ci stages, the cd job ci and cd
+# stages, the prod job only the production stages of the commit cd deployed.
 render_job() {
   local job=$1 flags phase name args key image
   flags="$(maven_flags "" "$CI_SETTINGS") -Dmaven.repo.local=../.m2/repository"
   image=$(value MAVEN_IMAGE "$(build_image)")
 
   printf '  - name: %s\n    plan:\n      - get: source\n' "$job"
-  if [[ $job == ci ]]; then
-    printf '        trigger: true\n'
-  else
-    printf '        passed: [ci]\n'
-  fi
+  case $job in
+    ci) printf '        trigger: true\n' ;;
+    cd) printf '        passed: [ci]\n' ;;
+    prod) printf '        passed: [cd]\n' ;;
+  esac
   printf '      - task: %s\n        config:\n          platform: linux\n' "$job"
   printf '          image_resource:\n            type: registry-image\n            source:\n'
   printf '              repository: %s\n              tag: %s\n' "${image%:*}" "$(yaml_quote "${image##*:}")"
@@ -60,7 +62,10 @@ render_job() {
   printf '                command -v git > /dev/null || { apt-get update -qq && apt-get install -y -qq git openssh-client > /dev/null; }\n'
   printf '                %s\n' "$(pipeline_ci_setup)"
   while IFS='|' read -r _ phase name args; do
-    [[ $job == ci && $phase != ci ]] && continue
+    case $job:$phase in
+      ci:ci | cd:ci | cd:cd | prod:prod) ;;
+      *) continue ;;
+    esac
     printf '                echo "==> %s"\n                %s\n' "$name" "$(stage_command "$flags" "$args")"
   done < <(pipeline_stages)
 }
@@ -78,6 +83,7 @@ module_render() {
     printf 'jobs:\n'
     render_job ci
     render_job cd
+    if pipeline_has_prod; then render_job prod; fi
   } > "$dir/pipeline.yml"
 
   ( umask 077
@@ -136,11 +142,13 @@ module_run() {
   while (( $# )); do
     case $1 in
       --phase) job=$2; shift 2 ;;
-      *) die "run: unknown option $1 (use --phase ci|cd)" ;;
+      *) die "run: unknown option $1 (use --phase ci|cd|prod)" ;;
     esac
   done
-  [[ $job == ci || $job == cd ]] || die "--phase must be ci or cd"
+  [[ $job == ci || $job == cd || $job == prod ]] || die "--phase must be ci, cd or prod"
   fly status > /dev/null 2>&1 || module_configure
+  # Build the latest commit, not the one Concourse saw at its last check.
+  [[ $job == ci ]] && fly check-resource --resource "$(pipeline_name)/source" > /dev/null
   fly trigger-job --job "$(pipeline_name)/$job" --watch
 }
 

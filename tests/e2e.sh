@@ -67,6 +67,7 @@ cat >> "$project/devops.conf" <<EOF
 GITHUB_URL=http://$HOST_IP:$GIT_PORT
 GITHUB_REPOSITORY=e2e/$EXAMPLE
 NEXUS_ACCEPT_EULA=yes
+JENKINS_TRIGGER=none
 EOF
 git config --global user.name > /dev/null 2>&1 || git config --global user.name e2e
 git config --global user.email > /dev/null 2>&1 || git config --global user.email e2e@example.com
@@ -83,12 +84,15 @@ if [[ ,$WITH, == *,jfrog,* ]]; then
   exit 0
 fi
 
+run_pipeline() {
+  case $ORCHESTRATOR in
+    maven|jenkins) devops run ;;
+    concourse) devops run --phase ci && devops run --phase cd ;;
+  esac
+}
+
 step "devops.sh run"
-case $ORCHESTRATOR in
-  maven) devops run ;;
-  jenkins) devops run ;;
-  concourse) devops run --phase ci && devops run --phase cd ;;
-esac
+run_pipeline
 
 step "Results in the tools"
 if [[ ,$WITH, == *,sonarqube,* ]]; then
@@ -115,5 +119,40 @@ if [[ ,$WITH, == *,docker-registry,* ]]; then
   docker rm -f e2e-image > /dev/null
   [[ $health == *UP* ]] || fail "the image does not start: $health"
   printf 'ok  the registry has the image %s and it starts\n' "$tag"
+fi
+if [[ ,$WITH, == *,docker-host,* ]]; then
+  # app_check <environment>: prints the tag that runs and checks the answer.
+  app_check() {
+    local port answer
+    port=$(devops get "DEPLOY_$(tr '[:lower:]' '[:upper:]' <<< "$1")_PORT")
+    answer=$(curl -fsS "http://localhost:$port/hello?name=e2e") || fail "$1 does not answer on port $port"
+    jq -e --arg env "$1" '.environment == $env' <<< "$answer" > /dev/null || fail "$1 answers $answer"
+    docker inspect --format '{{.Config.Image}}' "$(devops get IMAGE_NAME)-$1-app-1" | sed 's/.*://'
+  }
+  first=$(git -C "$project" rev-parse --short=12 HEAD)
+  [[ $(app_check staging) == "$first" ]] || fail "staging does not run $first"
+  printf 'ok  staging runs %s\n' "$first"
+  ! curl -fsS -o /dev/null "http://localhost:$(devops get DEPLOY_PRODUCTION_PORT)/actuator/health" 2> /dev/null \
+    || fail "production was deployed without approval"
+  printf 'ok  production waits for the approval\n'
+
+  step "devops.sh run --phase prod"
+  devops run --phase prod
+  [[ $(app_check production) == "$first" ]] || fail "production does not run $first"
+  printf 'ok  production runs %s\n' "$first"
+
+  step "A second commit, then rollback"
+  printf '\nChanged by the end-to-end test.\n' >> "$project/README.md"
+  git -C "$project" commit -qam "Second commit"
+  git -C "$project" push -q "$WORK/git/e2e/$EXAMPLE.git" main
+  git -C "$WORK/git/e2e/$EXAMPLE.git" update-server-info
+  second=$(git -C "$project" rev-parse --short=12 HEAD)
+  run_pipeline
+  devops run --phase prod
+  [[ $(app_check production) == "$second" ]] || fail "production does not run $second"
+  printf 'ok  production runs %s\n' "$second"
+  devops rollback production
+  [[ $(app_check production) == "$first" ]] || fail "rollback did not bring back $first"
+  printf 'ok  rollback brought back %s\n' "$first"
 fi
 printf '\nEnd-to-end test passed: %s with %s\n' "$ORCHESTRATOR" "$WITH"

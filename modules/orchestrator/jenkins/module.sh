@@ -7,7 +7,8 @@
 # publish recreates the Jenkins container so it reloads env and casc.yaml.
 #         With an existing server (JENKINS_SERVER_URL) it creates or updates
 #         the credentials and the job through the REST API instead.
-# run     triggers the job and streams its console.
+# run     triggers the job and streams its console.  With production stages
+#         the build stops at an approval step; "run --phase prod" approves it.
 
 job_name() { printf '%s' "$PROJECT_NAME"; }
 
@@ -74,6 +75,9 @@ module_destroy() {
   fi
 }
 
+# The build log shows this line while it waits for the approval.
+APPROVAL_MESSAGE='Deploy to production?'
+
 groovy_escape() { local v=${1//\\/\\\\}; printf '%s' "${v//\'/\\\'}"; }
 xml_escape() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
 
@@ -103,7 +107,13 @@ render_jenkinsfile() {
   printf "    stage('checkout') {\n      steps {\n"
   printf "        git url: env.GITHUB_URL + '/' + env.GITHUB_REPOSITORY + '.git', branch: env.GIT_BRANCH, credentialsId: '%s'\n" "$(credential_id github-https)"
   printf "        sh '%s'\n      }\n    }\n" "$(pipeline_ci_setup)"
-  while IFS='|' read -r _ _ name args; do
+  local phase approval=0
+  while IFS='|' read -r _ phase name args; do
+    if [[ $phase == prod ]] && (( ! approval )); then
+      approval=1
+      printf "    stage('approve-production') {\n      steps {\n        timeout(time: 7, unit: 'DAYS') {\n"
+      printf "          input id: 'Production', message: '%s', ok: 'Deploy'\n        }\n      }\n    }\n" "$APPROVAL_MESSAGE"
+    fi
     printf "    stage('%s') {\n      steps {\n        sh '%s'\n      }\n    }\n" "$name" "$(stage_command "$flags" "$args")"
   done < <(pipeline_stages)
   printf '  }\n}\n'
@@ -286,8 +296,63 @@ module_publish() {
   log_ok "Job '$(job_name)' is ready at $(jenkins_url)/job/$(job_name)/"
 }
 
+# stream_build <number> <start>: prints the console from <start> until the
+# build ends (returns 0) or waits for the production approval (returns 2).
+stream_build() {
+  local number=$1 start=$2 headers chunk size more
+  headers=$(mktemp)
+  while true; do
+    chunk=$(jenkins_api GET "/job/$(job_name)/$number/logText/progressiveText?start=$start" -D "$headers")
+    [[ -n $chunk ]] && printf '%s\n' "$chunk"
+    size=$(awk 'tolower($1) == "x-text-size:" { print $2 }' "$headers" | tr -d '\r')
+    more=$(awk 'tolower($1) == "x-more-data:" { print $2 }' "$headers" | tr -d '\r')
+    start=${size:-$start}
+    [[ $more == true ]] || break
+    if [[ $chunk == *"$APPROVAL_MESSAGE"* ]]; then
+      rm -f "$headers"
+      return 2
+    fi
+    sleep 2
+  done
+  rm -f "$headers"
+}
+
+# finish_build <number>: waits for the result.
+finish_build() {
+  local result
+  result=$(jenkins_api GET "/job/$(job_name)/$1/api/json" | jq -r '.result')
+  [[ $result == SUCCESS ]] || die "Build #$1 finished with $result"
+  log_ok "Build #$1 succeeded"
+}
+
+# approve_production: lets the build that waits for approval continue.
+approve_production() {
+  local number status headers size
+  number=$(jenkins_api GET "/job/$(job_name)/lastBuild/api/json" | jq -r 'select(.building) | .number')
+  [[ -n $number ]] || die "No build of $(job_name) is waiting for the production approval. Run '$DEVOPS_CMD run' first."
+  headers=$(mktemp)
+  jenkins_api GET "/job/$(job_name)/$number/logText/progressiveText?start=0" -D "$headers" -o /dev/null
+  size=$(awk 'tolower($1) == "x-text-size:" { print $2 }' "$headers" | tr -d '\r')
+  rm -f "$headers"
+  status=$(jenkins_api POST "/job/$(job_name)/$number/input/Production/proceedEmpty" -o /dev/null -w '%{http_code}')
+  [[ $status == 200 || $status == 302 ]] || die "Build #$number does not wait for the production approval (HTTP $status)."
+  log_ok "Approved production for build #$number"
+  stream_build "$number" "${size:-0}" || die "Build #$number waits for another approval"
+  finish_build "$number"
+}
+
 module_run() {
-  local headers location number='' start=0 size more result
+  local headers location number='' status=0
+  while (( $# )); do
+    case $1 in
+      --phase)
+        case $2 in
+          prod) approve_production; return ;;
+          *) die "run: Jenkins runs ci and cd in one build; --phase only takes prod (the approval)" ;;
+        esac ;;
+      *) die "run: unknown option $1 (use --phase prod)" ;;
+    esac
+  done
   headers=$(mktemp)
   jenkins_api POST "/job/$(job_name)/build" -D "$headers" -o /dev/null
   location=$(awk 'tolower($1) == "location:" { print $2 }' "$headers" | tr -d '\r')
@@ -301,20 +366,13 @@ module_run() {
   done
   log_info "Build #$number: $(jenkins_url)/job/$(job_name)/$number/console"
 
-  headers=$(mktemp)
-  while true; do
-    jenkins_api GET "/job/$(job_name)/$number/logText/progressiveText?start=$start" -D "$headers"
-    size=$(awk 'tolower($1) == "x-text-size:" { print $2 }' "$headers" | tr -d '\r')
-    more=$(awk 'tolower($1) == "x-more-data:" { print $2 }' "$headers" | tr -d '\r')
-    start=${size:-$start}
-    [[ $more == true ]] || break
-    sleep 2
-  done
-  rm -f "$headers"
-
-  result=$(jenkins_api GET "/job/$(job_name)/$number/api/json" | jq -r '.result')
-  [[ $result == SUCCESS ]] || die "Build #$number finished with $result"
-  log_ok "Build #$number succeeded"
+  stream_build "$number" 0 || status=$?
+  if (( status == 2 )); then
+    log_ok "Build #$number passed staging and waits for the production approval"
+    log_info "Approve it with '$DEVOPS_CMD run --phase prod' or at $(jenkins_url)/job/$(job_name)/$number/input/"
+    return 0
+  fi
+  finish_build "$number"
 }
 
 module_urls() {

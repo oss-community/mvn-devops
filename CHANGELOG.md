@@ -28,9 +28,20 @@ GitHub release.
 - `examples/hello-api`, a small Spring Boot web application with a health
   endpoint, used by the deployment tests.
 - Stages can call scripts from `templates/scripts/` through `$DEVOPS_SCRIPTS`.
+- Deployment to a machine (`docker-host`): Docker Compose over SSH, to staging
+  in the cd phase and to production after an approval. Each deployment is
+  checked at the application's health endpoint and the previous image is put
+  back when the check fails. Without a machine, a simulated one runs in Docker.
+- A `prod` phase for stages that wait for an approval: `run --phase prod` with
+  every orchestrator, an `input` step in Jenkins, a manual `prod` job in
+  Concourse.
+- `devops.sh rollback [staging|production] [--to TAG]`.
+- Categories can be `optional`: at most one module, or none.
 
 ### Changed
 
+- `run` with the maven orchestrator no longer runs production stages; the
+  Concourse `ci` job builds the latest commit.
 - Java 21 and Maven 3.9 everywhere (Jenkins image, Concourse tasks, `doctor`).
 - SonarQube Community Build 26.9 instead of the frozen `lts-community` (9.9)
   tag, PostgreSQL 18, and the latest stable Maven plugins (sonar 5.8.0.7211,

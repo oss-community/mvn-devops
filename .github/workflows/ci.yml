@@ -27,7 +27,11 @@ jobs:
       - name: Bash 4+ and jq from Homebrew
         run: brew install bash jq
       - name: smoke test
-        run: $(brew --prefix)/bin/bash tests/smoke.sh
+        timeout-minutes: 15
+        run: PS4='+ ${BASH_SOURCE##*/}:${LINENO} ' $(brew --prefix)/bin/bash -x tests/smoke.sh 2> "$RUNNER_TEMP/trace.log"
+      - name: last lines of the trace
+        if: failure()
+        run: tail -n 60 "$RUNNER_TEMP/trace.log"
 
   windows:
     runs-on: windows-latest

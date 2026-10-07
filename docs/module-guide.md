@@ -100,7 +100,7 @@ they may not contain `'`, `\`, `|` or `${`. Use `$VAR` instead of `${VAR}`.
 A stage that needs more than one command calls a script from
 `templates/scripts/`: `shell_stage 80 cd deploy "sh \"\$DEVOPS_SCRIPTS/deploy.sh\""`.
 `DEVOPS_SCRIPTS` is that directory when the pipeline runs on this machine;
-Jenkins and Concourse get a copy in `.devops/scripts` before the first stage.
+maven-container, Jenkins and Concourse get a copy in `.devops/scripts` before the first stage.
 Scripts get every pipeline variable in the environment.
 
 ## Example: a new artifact repository

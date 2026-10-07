@@ -5,7 +5,7 @@ A modular DevOps framework for Maven projects, written in plain Bash.
 You pick the tools from a menu, mvn-devops starts them in Docker, configures
 them (admin passwords, tokens, repositories) and turns the stages they
 contribute into a pipeline for the orchestrator you chose: plain `mvn` on your
-machine, Jenkins or Concourse.
+machine, `mvn` in a container on a Docker machine, Jenkins or Concourse.
 
 ```
 $ mvn-devops/devops.sh init
@@ -14,6 +14,7 @@ Pipeline orchestrator (choose one)
   1) concourse        Concourse CI in Docker: a ci job on every push, a manual cd job
   2) jenkins          Jenkins in Docker, configured as code (no setup wizard)
   3) maven            Run the stages with mvn directly on this machine
+  4) maven-container  Run the stages with mvn in a container on the Docker machine, from a fresh checkout of GitHub
   > [1]: 2
 
 Code quality (choose any, comma separated, 0 for none)
@@ -60,6 +61,9 @@ Windows steps, the deb and rpm packages, and notes on line endings are in
 [docs/installation.md](docs/installation.md).
 
 ## Quick start
+
+Step-by-step guides, one command per step, are in
+[docs/getting-started.md](docs/getting-started.md).
 
 Create the GitHub token first ([docs/github-setup.md](docs/github-setup.md)),
 then from the project root:
@@ -114,7 +118,7 @@ mvn-devops/devops.sh -y setup
 | `up`, `configure`, `publish` | single setup steps |
 | `stages` | the ordered stages contributed by the selected modules |
 | `render` | write pipeline files into `.devops/generated` |
-| `run` | run the pipeline. maven: `--dry-run`, `--from <stage>`, `--only <stage>`, `--phase ci\|cd`. concourse: `--phase ci\|cd`. Every orchestrator: `--phase <environment>` approves an environment |
+| `run` | run the pipeline. maven, maven-container: `--dry-run`, `--from <stage>`, `--only <stage>`, `--phase ci\|cd`. concourse: `--phase ci\|cd`. Every orchestrator: `--phase <environment>` approves an environment |
 | `rollback [environment] [--to TAG]` | put the previous image back, in the last environment by default |
 | `release [--version X] [--next Y] [--dry-run] [--no-push]` | release the project ([docs/releasing.md](docs/releasing.md)) |
 | `status`, `urls`, `logs [service]`, `compose ...` | operations |
@@ -130,13 +134,14 @@ mvn-devops/devops.sh -y setup
 
 | | |
 |---|---|
+| [Getting started](docs/getting-started.md) | step-by-step guides |
 | [Installation](docs/installation.md) | packages, the zip inside a project, upgrades, line endings |
 | [Prerequisites](docs/prerequisites.md) | install commands for Windows, Linux and macOS |
 | [GitHub setup](docs/github-setup.md) | tokens and their scopes, SSH key |
 | [Ready-made pipelines](docs/pipelines.md) | tested combinations of tools, and your own |
 | [Modules and stages](docs/modules.md) | every tool and the stages it adds |
 | [Project requirements](docs/project-requirements.md) | what the Maven project needs (almost nothing) |
-| [Orchestrators](docs/orchestrators.md) | maven, Jenkins, Concourse, and the Docker images |
+| [Orchestrators](docs/orchestrators.md) | maven, maven-container, Jenkins, Concourse, and the Docker images |
 | [Where the tools run](docs/where-tools-run.md) | existing servers, a VM, the exported compose file |
 | [Project site](docs/github-pages.md) | the Maven site on GitHub Pages |
 | [Deployment](docs/deployment.md) | environments, container images, registries and deploying the application |

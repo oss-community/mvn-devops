@@ -13,7 +13,7 @@ pipeline that is ready to run.
 |---|---|---|
 | Source control | required | github |
 | Build | required | maven (validate, package, test, checkstyle, install) |
-| Pipeline orchestrator | one | maven (on your machine), jenkins, concourse |
+| Pipeline orchestrator | one | maven (on your machine), maven-container, jenkins, concourse |
 | Code quality | any | sonarqube |
 | Artifact repositories | any | jfrog, nexus, github-packages |
 | Project site | any | github-pages |
@@ -54,13 +54,15 @@ says "stage 45 in phase ci:
 it into its own format:
 
 - **maven** runs every stage with `mvn` on your machine.
+- **maven-container** writes a script that checks the commit out of GitHub
+  and runs the stages with `mvn` in a container on the Docker machine.
 - **jenkins** writes a Jenkinsfile and a `casc.yaml` that defines the admin
   user, the credentials and the job. No setup wizard and nothing to click.
 - **concourse** writes a `pipeline.yml` with a `ci` job that runs on every
   push, a `cd` job you start by hand after `ci` passed, and a job per
   environment that needs approval.
 
-So a new tool shows up in all three orchestrators at once.
+So a new tool shows up in every orchestrator at once.
 
 ## The project's pom.xml needs no profiles
 
@@ -100,7 +102,7 @@ in `<project>/devops.conf`, which you commit. Everything else is kept in
   env/pipeline.env      variables handed to the pipeline (compose env_file format)
   env/pipeline.sh       the same as bash exports
   env/compose.env       everything, for ${VAR} substitution in compose files
-  generated/            Jenkinsfile, jenkins/casc.yaml, concourse/*.yml, pipeline.sh
+  generated/            Jenkinsfile, jenkins/casc.yaml, concourse/*.yml, pipeline.sh, maven-container/run.sh
   keys/                 generated SSH deploy key
 ```
 
@@ -112,7 +114,7 @@ URLs handed to the pipeline depend on where it runs. A tool on an existing
 server is always reached at its own URL. A tool in Docker is reached at
 `DEVOPS_HOST:<port>` by the `maven` orchestrator and by an existing Jenkins or
 Concourse server, and at its compose service name (`http://sonarqube:9000`) by
-Jenkins or Concourse in Docker, which share its network. See
+maven-container, and Jenkins or Concourse in Docker, which share its network. See
 [Where the tools run](where-tools-run.md).
 
 ## Where the tools run

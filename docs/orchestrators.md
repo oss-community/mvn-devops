@@ -4,6 +4,18 @@
 variables exported only for that process. `render` also writes
 `.devops/generated/pipeline.sh` for IDE run configurations.
 
+**maven-container** runs the same stages with `mvn` in a container from the
+official image `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>`
+(`MAVEN_IMAGE`), started by `run` on the Docker machine: this one, or the one
+`DOCKER_HOST` points to ([where-tools-run.md](where-tools-run.md)). The
+container checks the branch (`GIT_BRANCH`) out of GitHub, so push your commits
+before `run`; it needs neither Java, Maven nor the checkout of this machine.
+It joins the network of the tools and reaches them by their service names, as
+Jenkins and Concourse do, and a volume keeps the Maven repository and the
+downloaded tools between runs. `run` takes the same options as with maven;
+`run --phase <environment>` deploys the commit that passed the part of the
+pipeline before it, not the newest one. `destroy` removes the volume.
+
 **jenkins** builds an image from `jenkins/jenkins:lts-jdk21` with Maven 3.9
 (copied from the official Maven image) and the needed plugins, skips the setup wizard and configures everything with
 Configuration as Code: the admin user, one secret-text credential per secret and
@@ -34,7 +46,7 @@ it, in the way each orchestrator offers:
 
 | Orchestrator | Waiting | Approve with |
 |---|---|---|
-| maven | `run` stops before the environment | `devops.sh run --phase <environment>` |
+| maven, maven-container | `run` stops before the environment | `devops.sh run --phase <environment>` |
 | jenkins | the build stops at the `approve-<environment>` stage (an `input` step, kept for 7 days) | `devops.sh run --phase <environment>`, or *Deploy* in the build |
 | concourse | the environment's job, after the job before it passed | `devops.sh run --phase <environment>`, or the job's + button |
 
@@ -42,7 +54,7 @@ it, in the way each orchestrator offers:
 commit that passed the environments before it; it is not built again.
 
 Stage scripts (`templates/scripts`) and the Helm chart (`templates/helm`) reach
-Jenkins and Concourse as a compressed copy in the generated pipeline, unpacked
+maven-container, Jenkins and Concourse as a compressed copy in the generated pipeline, unpacked
 into `.devops/` of the checkout before the first stage.
 
 All orchestrators use the same Java and Maven, set with `JAVA_VERSION` (21)
@@ -59,7 +71,7 @@ Every tool runs from its official image, unchanged:
 | Nexus | `sonatype/nexus3` |
 | Artifactory OSS | `releases-docker.jfrog.io/jfrog/artifactory-oss` (with `postgres:18`) |
 | Concourse | `concourse/concourse` (with `postgres:18`) |
-| Concourse build tasks | `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>` |
+| Concourse build tasks, maven-container | `maven:<MAVEN_VERSION>-eclipse-temurin-<JAVA_VERSION>` |
 | Docker registry | `registry:3` |
 | Simulated deploy machine | built from `docker:cli` with openssh-server and curl |
 | Kubernetes | `rancher/k3s:v1.37.1-k3s1` (`K3S_IMAGE_TAG`) |

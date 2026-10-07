@@ -45,6 +45,10 @@ export DOCKER_HOST=ssh://user@build-vm      # or a docker context
 ../mvn-devops/devops.sh run                 # mvn runs here and talks to build-vm:<port>
 ```
 
+With the `maven-container` orchestrator mvn runs on the VM as well, in a
+container next to the tools, and your machine needs only Docker's client and
+`devops.sh` ([getting-started.md](getting-started.md#guide-3-maven-in-a-container-on-another-machine)).
+
 `secrets` takes the default for `DEVOPS_HOST` from `DOCKER_HOST` or the docker
 context. The ports must be reachable from where the pipeline runs (firewall,
 security group). Jenkins in Docker mounts its configuration from `.devops/`,

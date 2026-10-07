@@ -33,8 +33,7 @@ module_render() {
 }
 
 module_run() {
-  local dry=0 from="" only="" phase="" group="" started=0 ran=0 stage_phase stage_group name args flags line
-  local -a held=()
+  local dry=0 from="" only="" phase="" phase_name name args flags line
   while (( $# )); do
     case $1 in
       --dry-run) dry=1; shift ;;
@@ -44,63 +43,21 @@ module_run() {
       *) die "run: unknown option $1 (use --dry-run, --from <stage>, --only <stage>, --phase ci|cd|<environment>)" ;;
     esac
   done
-  if [[ -n $phase && $phase != ci && $phase != cd ]]; then
-    phase=$(env_resolve "$phase") || die "--phase must be ci, cd or an environment ($(environments))"
-  fi
-  [[ -z $from ]] && started=1
+  phase=$(pipeline_phase "$phase")
   flags=$(maven_flags "$PROJECT_DIR" "$(printf '%q' "$DEVOPS_HOME/templates/settings.xml")")
   command -v mvn > /dev/null || (( dry )) || die "mvn is not installed"
 
-  local -a stages=()
-  mapfile -t stages < <(pipeline_stages)
-  for line in "${stages[@]}"; do
-    IFS="|" read -r _ stage_phase name args <<< "$line"
-    [[ $name == "$from" ]] && started=1
-    (( started )) || continue
-    [[ -n $only && $name != "$only" ]] && continue
-    stage_group=$(phase_group "$stage_phase")
-    if [[ -n $only ]]; then
-      :
-    elif [[ $phase == ci ]]; then
-      [[ $stage_phase == ci ]] || continue
-    elif [[ $phase == cd ]]; then
-      # cd and the environments before the first approval.
-      [[ $stage_phase != ci && $stage_group == cd ]] || continue
-    elif [[ -n $phase ]]; then
-      # The approval of an environment: it and the ones that follow it.
-      [[ -n $group ]] || group=$(phase_group "$phase")
-      [[ $stage_group == "$group" && $(phase_rank "$stage_phase") -ge $(phase_rank "$phase") ]] || continue
-    elif [[ $stage_group != ci && $stage_group != cd ]]; then
-      # Stages behind an approval run only when asked for: that is the approval.
-      [[ " ${held[*]} " == *" $stage_group "* ]] || held+=("$stage_group")
-      continue
-    fi
-    ran=$((ran + 1))
-    log_step "[$stage_phase] $name"
+  pipeline_select "$phase" "$from" "$only"
+  for line in "${SELECTED[@]}"; do
+    IFS="|" read -r phase_name name args <<< "$line"
+    log_step "[$phase_name] $name"
     log_dim "$(stage_command "$flags" "$args")"
     (( dry )) && continue
     # shellcheck disable=SC1091
     ( source "$DEVOPS_ENV/pipeline.sh"; cd "$PROJECT_DIR"; eval "$(stage_command "$flags" "$args")" ) \
       || die "Stage '$name' failed. Resume with '$DEVOPS_CMD run --from $name'."
   done
-  (( started )) || die "No stage named '$from'. See '$DEVOPS_CMD stages'."
-  (( ran )) || die "No stage matched. See '$DEVOPS_CMD stages'."
   log_ok "Pipeline finished"
-  if [[ -z $phase && -z $only ]] && (( ${#held[@]} )); then
-    log_info "${held[0]} waits for approval: '$DEVOPS_CMD run --phase ${held[0]}'."
-  elif [[ -n $phase && $phase != ci && $phase != cd ]]; then
-    next_approval "$phase"
-  fi
+  [[ -n $only ]] || pipeline_next "$phase"
   return 0
-}
-
-# next_approval <environment>: tells which approval comes after it, if any.
-next_approval() {
-  local gate
-  for gate in $(pipeline_gates); do
-    if (( $(phase_rank "$gate") > $(phase_rank "$1") )); then
-      log_info "$gate waits for approval: '$DEVOPS_CMD run --phase $gate'."
-      return 0
-    fi
-  done
 }

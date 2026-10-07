@@ -41,6 +41,13 @@ GitHub release.
   `devops.sh pipelines` lists them and `setup --pipeline <name or file>`
   sets one up, asking only for what cannot be generated (the GitHub user and
   token, the Nexus licence). See `docs/pipelines.md`.
+- More ready-made pipelines (16 in all), from Maven with SonarQube and Nexus
+  up to Jenkins with every kind of tool, e.g. `jenkins-sonarqube-nexus-argocd`,
+  `concourse-kubernetes-vault` and `jenkins-complete`.
+- The `maven-container` orchestrator: the stages run with `mvn` in a container
+  on the Docker machine, this one or another one, from a fresh checkout of
+  GitHub. See `docs/orchestrators.md`.
+- `docs/getting-started.md`: step-by-step guides, one command per step.
 - Deployment to a machine (`docker-host`): Docker Compose over SSH, to staging
   in the cd phase and to production after an approval. Each deployment is
   checked at the application's health endpoint and the previous image is put

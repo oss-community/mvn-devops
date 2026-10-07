@@ -151,6 +151,29 @@ for orchestrator in maven jenkins concourse; do
   [[ $(devops env --show | grep '^DEPLOY_STAGING_TARGET=') == "DEPLOY_STAGING_TARGET=root@$( [[ $orchestrator == maven ]] && echo localhost || echo deploy-host)" ]] \
     || fail "deploy: $orchestrator reaches the simulated machine at the wrong address"
 done
+# Maven in a container: a script that checks the commit out of GitHub, unpacks
+# the stage scripts and reaches the tools by their service names.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven-container --with sonarqube,docker-registry,docker-host > /dev/null
+devops secrets > /dev/null
+devops render > /dev/null
+runner="$project/.devops/generated/maven-container/run.sh"
+bash -n "$runner" || fail "maven-container: run.sh is not valid bash"
+grep -q 'git clone -q --branch "$GIT_BRANCH"' "$runner" || fail "maven-container: no checkout"
+grep -q 'base64 -d | tar -xzf - -C .devops' "$runner" || fail "maven-container: scripts"
+grep -q '^if want deploy-production; then' "$runner" || fail "maven-container: no production stage"
+env_out=$(devops env --show)
+grep -q '^SONAR_URL=http://sonarqube:9000$' <<< "$env_out" || fail "maven-container: SONAR_URL should use the service name"
+grep -q '^DEVOPS_SCRIPTS=.devops/scripts$' <<< "$env_out" || fail "maven-container: DEVOPS_SCRIPTS"
+grep -q 'jib-maven-plugin' <<< "$(devops stages)" || fail "maven-container: does not build with Jib"
+run_out=$(devops run --dry-run 2>&1)
+grep -q 'deploy-staging' <<< "$run_out" || fail "maven-container: does not deploy to staging"
+! grep -q 'deploy-production' <<< "$run_out" || fail "maven-container: deploys to production without approval"
+grep -q 'production waits for approval' <<< "$run_out" || fail "maven-container: no approval hint"
+run_out=$(devops run --dry-run --phase prod 2>&1)
+grep -q 'deploy-production' <<< "$run_out" || fail "maven-container: --phase prod"
+! grep -q 'deploy-staging' <<< "$run_out" || fail "maven-container: --phase prod deploys staging again"
+printf 'ok  maven-container\n'
 # Kubernetes: the same stages with Helm; the pipeline reaches k3s by its service name.
 for orchestrator in maven jenkins; do
   rm -rf "$project/.devops" "$project/devops.conf"

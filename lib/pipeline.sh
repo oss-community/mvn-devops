@@ -71,6 +71,75 @@ pipeline_gates() {
   return 0
 }
 
+# pipeline_phase <phase>: ci, cd or the environment a phase names ("prod"
+# is the last one).
+pipeline_phase() {
+  case $1 in
+    ''|ci|cd) printf '%s' "$1" ;;
+    *) env_resolve "$1" || die "--phase must be ci, cd or an environment ($(environments))" ;;
+  esac
+}
+
+# pipeline_select <phase> <from stage> <only stage>: the stages a run of the
+# maven orchestrators runs, as "phase|name|args" lines in SELECTED, and in
+# HELD the approvals it stops before.
+#   no phase  ci, cd and the environments before the first approval
+#   ci        the ci stages only
+#   cd        what follows ci up to the first approval
+#   <env>     the approval of an environment: it and the environments after
+#             it up to the next approval
+# A stage named with "only" runs whatever its phase.
+pipeline_select() {
+  local phase=$1 from=$2 only=$3 started=0 group='' line stage_phase stage_group name
+  local -a stages=()
+  SELECTED=()
+  HELD=()
+  [[ -z $from ]] && started=1
+  [[ -n $phase && $phase != ci && $phase != cd ]] && group=$(phase_group "$phase")
+  mapfile -t stages < <(pipeline_stages)
+  for line in "${stages[@]}"; do
+    IFS="|" read -r _ stage_phase name _ <<< "$line"
+    [[ $name == "$from" ]] && started=1
+    (( started )) || continue
+    [[ -n $only && $name != "$only" ]] && continue
+    stage_group=$(phase_group "$stage_phase")
+    if [[ -n $only ]]; then
+      :
+    elif [[ $phase == ci ]]; then
+      [[ $stage_phase == ci ]] || continue
+    elif [[ $phase == cd ]]; then
+      [[ $stage_phase != ci && $stage_group == cd ]] || continue
+    elif [[ -n $phase ]]; then
+      [[ $stage_group == "$group" && $(phase_rank "$stage_phase") -ge $(phase_rank "$phase") ]] || continue
+    elif [[ $stage_group != ci && $stage_group != cd ]]; then
+      # Stages behind an approval run only when asked for: that is the approval.
+      [[ " ${HELD[*]} " == *" $stage_group "* ]] || HELD+=("$stage_group")
+      continue
+    fi
+    SELECTED+=("${line#*|}")
+  done
+  (( started )) || die "No stage named '$from'. See '$DEVOPS_CMD stages'."
+  (( ${#SELECTED[@]} )) || die "No stage matched. See '$DEVOPS_CMD stages'."
+  return 0
+}
+
+# pipeline_next <phase>: after a run of the maven orchestrators, tells which
+# approval comes next.
+pipeline_next() {
+  local gate
+  if [[ -z $1 ]]; then
+    (( ${#HELD[@]} )) && log_info "${HELD[0]} waits for approval: '$DEVOPS_CMD run --phase ${HELD[0]}'."
+    return 0
+  fi
+  [[ $1 == ci || $1 == cd ]] && return 0
+  for gate in $(pipeline_gates); do
+    if (( $(phase_rank "$gate") > $(phase_rank "$1") )); then
+      log_info "$gate waits for approval: '$DEVOPS_CMD run --phase $gate'."
+      return 0
+    fi
+  done
+}
+
 # Shell stages are stored with a leading "!".
 shell_stage() {
   stage "$1" "$2" "$3" "!$4"

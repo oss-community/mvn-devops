@@ -40,3 +40,6 @@ mvn_deploy_args() {
 
 mvn_versions_set() { mvn_plugin MVN_VERSIONS_VERSION org.codehaus.mojo:versions-maven-plugin 2.22.0 set; }
 mvn_evaluate()     { mvn_plugin MVN_HELP_VERSION org.apache.maven.plugins:maven-help-plugin 3.5.2 evaluate; }
+
+# Official Maven image with the project's Java, for pipelines run in containers.
+maven_image() { printf 'maven:%s-eclipse-temurin-%s' "$(value MAVEN_VERSION 3.9)" "$(value JAVA_VERSION 21)"; }

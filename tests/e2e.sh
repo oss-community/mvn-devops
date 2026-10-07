@@ -16,7 +16,7 @@
 # token is needed.
 set -euo pipefail
 
-ORCHESTRATOR=${1:?usage: tests/e2e.sh <maven|jenkins|concourse> [modules] | tests/e2e.sh pipeline <name>}
+ORCHESTRATOR=${1:?usage: tests/e2e.sh <maven|maven-container|jenkins|concourse> [modules] | tests/e2e.sh pipeline <name>}
 WITH=${2:-sonarqube,nexus}
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PIPELINE=''
@@ -110,7 +110,7 @@ fi
 
 run_pipeline() {
   case $ORCHESTRATOR in
-    maven|jenkins) devops run ;;
+    maven|maven-container|jenkins) devops run ;;
     concourse) devops run --phase ci && devops run --phase cd ;;
   esac
 }
@@ -210,7 +210,7 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     port=$(env_port "$1")
     if [[ ,$WITH, == *,kubernetes,* ]]; then
       kind=deployment
-      [[ $1 == "$last" && ,$WITH, == *,argocd,* ]] && kind=rollouts.argoproj.io
+      [[ $1 == "$last" && ,$WITH, == *,argocd,* && $(devops get GITOPS_CANARY) == yes ]] && kind=rollouts.argoproj.io
       image=$(devops compose exec -T k3s kubectl get "$kind" "$(devops get IMAGE_NAME)" \
         --namespace "$(devops get IMAGE_NAME)-$1" --output 'jsonpath={.spec.template.spec.containers[0].image}')
     else

@@ -87,6 +87,15 @@ jobs:
           - orchestrator: maven
             with: docker-registry,argocd
             environments: dev test staging prod
+          # Maven in a container on the Docker machine, from a checkout of the repository.
+          - orchestrator: maven-container
+            with: sonarqube,nexus
+          - orchestrator: maven-container
+            with: docker-registry,docker-host,postgresql
+            environments: dev test staging prod
+            approvals: staging prod
+          - orchestrator: maven-container
+            with: docker-registry,argocd
           # Ready-made pipelines (pipelines/).
           - orchestrator: pipeline
             with: maven-docker-host
@@ -94,6 +103,26 @@ jobs:
             with: jenkins-kubernetes
           - orchestrator: pipeline
             with: concourse-sonarqube-nexus
+          - orchestrator: pipeline
+            with: jenkins-sonarqube-nexus-argocd
+          - orchestrator: pipeline
+            with: maven-container-kubernetes
+          - orchestrator: pipeline
+            with: maven-kubernetes
+          - orchestrator: pipeline
+            with: concourse-kubernetes-vault
+          - orchestrator: pipeline
+            with: jenkins-argocd-observability
+          - orchestrator: pipeline
+            with: concourse-docker-host-secure
+          - orchestrator: pipeline
+            with: jenkins-complete
+          - orchestrator: pipeline
+            with: jenkins-observability
+          - orchestrator: pipeline
+            with: concourse-argocd
+          - orchestrator: pipeline
+            with: maven-container-sonarqube-nexus
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

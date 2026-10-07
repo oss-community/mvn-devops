@@ -4,7 +4,7 @@
 |---|---|---|
 | Source control | required | `github` |
 | Build | required | `maven` (validate, package, test, checkstyle, install) |
-| Pipeline orchestrator | one | `maven`, `jenkins`, `concourse` |
+| Pipeline orchestrator | one | `maven`, `maven-container`, `jenkins`, `concourse` |
 | Code quality | any | `sonarqube` |
 | Artifact repositories | any | `jfrog`, `nexus`, `github-packages` |
 | Project site | any | `github-pages` |

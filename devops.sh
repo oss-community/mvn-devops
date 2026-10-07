@@ -70,7 +70,7 @@ Setup
 Pipeline
   stages       show the stages contributed by the selected tools
   render       generate the pipeline files into .devops/generated
-  run          run the pipeline  (maven: [--dry-run] [--from s] [--only s] [--phase ci|cd|<env>])
+  run          run the pipeline  (maven, maven-container: [--dry-run] [--from s] [--only s] [--phase ci|cd|<env>])
                  --phase <env>  approve an environment and deploy to it
                                 ("prod" stands for the last environment)
   rollback     put the previous image back  [environment] [--to TAG]

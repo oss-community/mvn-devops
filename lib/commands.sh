@@ -331,8 +331,9 @@ cmd_doctor() {
     fi
   fi
   # Windows checkouts with core.autocrlf=true turn the scripts into CRLF.
+  # -U keeps grep on Windows from hiding the CR it is looking for.
   local crlf
-  crlf=$(grep -rlI $'\r' --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | head -5 || true)
+  crlf=$(grep -rlIU $'\r' --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | head -5 || true)
   if [[ -n $crlf ]]; then
     log_warn "Files with Windows (CRLF) line endings, which Bash cannot run:"
     printf '    %s\n' "${crlf//$'\n'/$'\n'    }"

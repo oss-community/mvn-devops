@@ -122,8 +122,8 @@ git -C "$crlf_dir/app" init -q
 git -C "$crlf_dir/app" add -A
 git -C "$crlf_dir/app" -c user.name=t -c user.email=t@t commit -qm init
 git -c core.autocrlf=true clone -q "$crlf_dir/app" "$crlf_dir/clone"
-! grep -rlI $'\r' --exclude='*.bat' "$crlf_dir/clone/mvn-devops" > /dev/null || fail "line endings: CRLF after autocrlf checkout"
-grep -q $'\r$' "$crlf_dir/clone/mvn-devops/devops.bat" || fail "line endings: devops.bat should be CRLF"
+! grep -rlIU $'\r' --exclude='*.bat' "$crlf_dir/clone/mvn-devops" > /dev/null || fail "line endings: CRLF after autocrlf checkout"
+grep -qU $'\r' "$crlf_dir/clone/mvn-devops/devops.bat" || fail "line endings: devops.bat should be CRLF"
 perl -pi -e 's/\n/\r\n/' "$crlf_dir/clone/mvn-devops/templates/settings.xml"
 doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
 grep -q "CRLF" <<< "$doctor_out" || fail "line endings: doctor should report CRLF"

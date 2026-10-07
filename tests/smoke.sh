@@ -338,9 +338,13 @@ for file in "$ROOT"/pipelines/*.conf; do
   devops render > /dev/null || fail "pipelines: $name render"
 done
 # Without -y only what has no default is asked: the GitHub token and the
-# Nexus licence; the rest, passwords included, is taken or generated.
+# Nexus licence; the rest, passwords included, is taken or generated.  The
+# GitHub user is given, as git config may not know it.
 rm -rf "$project/.devops" "$project/devops.conf"
 devops init --pipeline maven-sonarqube-nexus > /dev/null
+mkdir -p "$project/.devops/values"
+printf 'demo' > "$project/.devops/values/GITHUB_USERNAME"
+printf 'demo@example.com' > "$project/.devops/values/GITHUB_EMAIL"
 "$ROOT/devops.sh" -p "$project" secrets <<< $'a-token\nyes' > /dev/null
 [[ $(devops get GITHUB_TOKEN):$(devops get NEXUS_ACCEPT_EULA) == a-token:yes ]] || fail "pipelines: questions in the wrong order"
 [[ -n $(devops get SONAR_ADMIN_PASSWORD) ]] || fail "pipelines: no generated password"

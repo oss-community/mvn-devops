@@ -54,9 +54,10 @@ preset_lines() {
 # preset_get <file> <KEY>
 preset_get() {
   local line
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n $line ]]; do
+    line=${line%"$CR"}
     [[ $line == "$2="* ]] && { printf '%s' "${line#*=}"; return 0; }
-  done < <(preset_lines "$1")
+  done < "$1"
   return 1
 }
 

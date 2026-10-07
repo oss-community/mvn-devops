@@ -35,6 +35,8 @@ GitHub release.
 
 - Docker on Windows got Git Bash paths in compose files and their `.env`.
 - `doctor` missed CRLF files on Windows, whose grep hides the CR.
+- On Windows (Bash with igncr) `doctor` reported every file as CRLF, because igncr
+  also drops the CR from `$'\r'` in the scripts.
 - Generating a password could hang on macOS where SIGPIPE is ignored.
 
 ## 1.0.0

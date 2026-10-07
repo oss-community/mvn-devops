@@ -2,6 +2,8 @@
 # mvn-devops: pick your DevOps tools, then set up and run a Maven pipeline.
 # On Windows (Git Bash, Cygwin) ignore CR in case the files got CRLF endings.
 (set -o igncr) 2>/dev/null && set -o igncr #
+# igncr also drops the CR from $'\r' in the scripts, so code uses $CR.
+printf -v CR '\r'
 set -euo pipefail
 
 # macOS ships Bash 3.2; the framework needs Bash 4 (mapfile and more).

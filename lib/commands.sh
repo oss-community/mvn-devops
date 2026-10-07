@@ -301,7 +301,7 @@ fix_line_endings() {
   local file line
   while IFS= read -r file; do
     {
-      while IFS= read -r line || [[ -n $line ]]; do printf '%s\n' "${line//$'\r'/}"; done < "$file"
+      while IFS= read -r line || [[ -n $line ]]; do printf '%s\n' "${line//"$CR"/}"; done < "$file"
     } > "$file.lf" && cat "$file.lf" > "$file" && rm -f "$file.lf"
     log_ok "LF: $file"
   done
@@ -310,7 +310,7 @@ fix_line_endings() {
 cmd_doctor() {
   local tool ok=1
   if [[ ${1:-} == --fix ]]; then
-    grep -rlIU $'\r' --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | fix_line_endings
+    grep -rlIU "$CR" --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | fix_line_endings
     return 0
   fi
   [[ $# -eq 0 ]] || die "doctor: unknown option $1 (use --fix)"
@@ -350,7 +350,7 @@ cmd_doctor() {
   # Windows checkouts with core.autocrlf=true turn the scripts into CRLF.
   # -U keeps grep on Windows from hiding the CR it is looking for.
   local crlf
-  crlf=$(grep -rlIU $'\r' --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | head -5 || true)
+  crlf=$(grep -rlIU "$CR" --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | head -5 || true)
   if [[ -n $crlf ]]; then
     log_warn "Files with Windows (CRLF) line endings, which Bash cannot run:"
     printf '    %s\n' "${crlf//$'\n'/$'\n'    }"

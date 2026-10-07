@@ -40,7 +40,7 @@ conf_get() {
   local line found=1 val=''
   [[ -f $DEVOPS_CONF ]] || return 1
   while IFS= read -r line || [[ -n $line ]]; do
-    line=${line%$'\r'}
+    line=${line%"$CR"}
     if [[ $line == "$1="* ]]; then val=${line#*=}; found=0; fi
   done < "$DEVOPS_CONF"
   (( found == 0 )) && printf '%s' "$val"
@@ -53,7 +53,7 @@ conf_set() {
   tmp=$(mktemp)
   if [[ -f $DEVOPS_CONF ]]; then
     while IFS= read -r line || [[ -n $line ]]; do
-      line=${line%$'\r'}
+      line=${line%"$CR"}
       if [[ $line == "$key="* ]]; then
         (( replaced )) || printf '%s=%s\n' "$key" "$val"
         replaced=1

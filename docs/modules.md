@@ -26,7 +26,7 @@ so `<prefix>-libs-release-local` and `<prefix>-libs-snapshot-local` exist.
 Default stages with every module selected (plugin coordinates shortened):
 
 ```
-ORDER  PHASE STAGE            MAVEN ARGUMENTS
+ORDER  PHASE      STAGE            MAVEN ARGUMENTS
 10     ci   validate         validate
 20     ci   build            clean package -DskipTests=true
 30     ci   test             test
@@ -44,10 +44,11 @@ ORDER  PHASE STAGE            MAVEN ARGUMENTS
 76     cd   sbom             (shell) sh "$DEVOPS_SCRIPTS/sbom.sh"
 77     cd   scan-image       (shell) sh "$DEVOPS_SCRIPTS/scan-image.sh"
 78     cd   sign-image       (shell) sh "$DEVOPS_SCRIPTS/sign-image.sh"
-80     cd   deploy-staging   (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" staging
-85     cd   load-test        (shell) sh "$DEVOPS_SCRIPTS/load-test.sh" staging
-89     prod verify-image     (shell) sh "$DEVOPS_SCRIPTS/verify-image.sh"
-90     prod deploy-production (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" production
+80     staging    deploy-staging          (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" staging
+85     staging    load-test               (shell) sh "$DEVOPS_SCRIPTS/load-test.sh" staging
+-      production approval                waits until someone approves production
+79     production verify-image-production (shell) sh "$DEVOPS_SCRIPTS/verify-image.sh"
+80     production deploy-production       (shell) sh "$DEVOPS_SCRIPTS/deploy-compose.sh" production
 ```
 
 **The project's pom.xml needs no profiles, no distributionManagement and no

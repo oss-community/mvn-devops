@@ -19,24 +19,27 @@ reachable from GitHub, see [docs/ngrok.md](ngrok.md), and the token needs
 after the first build, which records the repository.
 
 **concourse** runs `concourse quickstart` (web and worker in one container).
-The pipeline has a `ci` job, triggered by every push, and a `cd` job that runs
-all stages and is started by hand after `ci` passed. Tasks run in
+The pipeline has a `ci` job, triggered by every push, a `cd` job that runs
+the ci and cd stages and deploys to the environments before the first
+approval, started by hand after `ci` passed, and a job per environment that
+needs approval (see below). Tasks run in
 `maven:3.9-eclipse-temurin-21`. `fly` is downloaded from the server.
 
-## Production approval
+## Approvals
 
-Stages in the `prod` phase (the production deployment of the `docker-host`
-module) run only after someone approves them, in the way each orchestrator
-offers:
+A deployment environment that needs approval (by default the last one, see
+[Environments](deployment.md#environments)) runs its stages, and those of the
+environments after it up to the next approval, only after someone approves
+it, in the way each orchestrator offers:
 
 | Orchestrator | Waiting | Approve with |
 |---|---|---|
-| maven | `run` stops after the cd stages | `devops.sh run --phase prod` |
-| jenkins | the build stops at the `approve-production` stage (an `input` step, kept for 7 days) | `devops.sh run --phase prod`, or *Deploy* in the build |
-| concourse | the `prod` job, after `cd` passed | `devops.sh run --phase prod`, or the job's + button |
+| maven | `run` stops before the environment | `devops.sh run --phase <environment>` |
+| jenkins | the build stops at the `approve-<environment>` stage (an `input` step, kept for 7 days) | `devops.sh run --phase <environment>`, or *Deploy* in the build |
+| concourse | the environment's job, after the job before it passed | `devops.sh run --phase <environment>`, or the job's + button |
 
-The production stages deploy the commit that passed staging; they do not build
-it again.
+`prod` stands for the last environment. An approved environment gets the
+commit that passed the environments before it; it is not built again.
 
 Stage scripts (`templates/scripts`) and the Helm chart (`templates/helm`) reach
 Jenkins and Concourse as a compressed copy in the generated pipeline, unpacked

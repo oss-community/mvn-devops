@@ -3,9 +3,12 @@
 # example project and checks the results in the tools.
 #
 #   tests/e2e.sh <orchestrator> [modules]     e.g. tests/e2e.sh jenkins sonarqube,nexus
+#   tests/e2e.sh pipeline <name>              a ready-made pipeline (pipelines/<name>.conf)
 #
 # The example is examples/hello-maven, examples/hello-api when an image is
 # built, or examples/hello-data with a database; E2E_EXAMPLE picks another one.
+# E2E_ENVIRONMENTS sets the deployment environments (e.g. "dev test staging
+# prod") and E2E_APPROVALS the ones that need approval (default: the last).
 #
 # Needs Docker with internet access; CI runs it on GitHub's runners
 # (.github/workflows/e2e.yml).  The project is served from a local git
@@ -13,9 +16,15 @@
 # token is needed.
 set -euo pipefail
 
-ORCHESTRATOR=${1:?usage: tests/e2e.sh <maven|jenkins|concourse> [modules]}
+ORCHESTRATOR=${1:?usage: tests/e2e.sh <maven|jenkins|concourse> [modules] | tests/e2e.sh pipeline <name>}
 WITH=${2:-sonarqube,nexus}
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PIPELINE=''
+if [[ $ORCHESTRATOR == pipeline ]]; then
+  PIPELINE=${2:?usage: tests/e2e.sh pipeline <name>}
+  ORCHESTRATOR=$(sed -n 's/^ORCHESTRATOR=//p' "$ROOT/pipelines/$PIPELINE.conf")
+  WITH=$(sed -n 's/^TOOLS=//p' "$ROOT/pipelines/$PIPELINE.conf")
+fi
 WORK=${E2E_WORK:-$(mktemp -d)}
 mkdir -p "$WORK"
 # An address the tool containers reach this machine on.
@@ -62,8 +71,12 @@ server_pid=$!
 sleep 1
 git ls-remote "http://$HOST_IP:$GIT_PORT/e2e/$EXAMPLE.git" > /dev/null || fail "git server not reachable"
 
-step "devops.sh setup ($ORCHESTRATOR with $WITH)"
-devops init --orchestrator "$ORCHESTRATOR" --with "$WITH" > /dev/null
+step "devops.sh setup ($ORCHESTRATOR with $WITH${PIPELINE:+, ready-made pipeline $PIPELINE})"
+if [[ -n $PIPELINE ]]; then
+  devops init --pipeline "$PIPELINE" > /dev/null
+else
+  devops init --orchestrator "$ORCHESTRATOR" --with "$WITH" > /dev/null
+fi
 # The committed team settings: a plain HTTP git server instead of GitHub.
 cat >> "$project/devops.conf" <<EOF
 GITHUB_URL=http://$HOST_IP:$GIT_PORT
@@ -72,6 +85,14 @@ NEXUS_ACCEPT_EULA=yes
 JENKINS_TRIGGER=none
 TRIVY_FAIL_ON=
 EOF
+if [[ -n ${E2E_ENVIRONMENTS:-} ]]; then
+  printf 'ENVIRONMENTS=%s\n' "$E2E_ENVIRONMENTS" >> "$project/devops.conf"
+  for env in $E2E_ENVIRONMENTS; do
+    approval=no
+    [[ " ${E2E_APPROVALS:-${E2E_ENVIRONMENTS##* }} " == *" $env "* ]] && approval=yes
+    printf 'ENV_%s_APPROVAL=%s\n' "$(tr '[:lower:]' '[:upper:]' <<< "$env")" "$approval" >> "$project/devops.conf"
+  done
+fi
 git config --global user.name > /dev/null 2>&1 || git config --global user.name e2e
 git config --global user.email > /dev/null 2>&1 || git config --global user.email e2e@example.com
 devops setup
@@ -97,15 +118,21 @@ run_pipeline() {
 # greeting <environment>: the GREETING secret of the environment in Vault,
 # with a $ that must not be interpolated on the way.
 greeting() { printf 'Hola-%s $5' "$1"; }
+# The environments, in order; the last one is where the releases end.
+read -r -a envs <<< "$(devops get ENVIRONMENTS 2> /dev/null || echo staging production)"
+last=${envs[${#envs[@]} - 1]}
+upper() { tr '[:lower:]' '[:upper:]' <<< "$1"; }
+needs_approval() { [[ $(devops get "ENV_$(upper "$1")_APPROVAL") == yes ]]; }
+
 if [[ ,$WITH, == *,vault,* ]]; then
   step "Secrets in Vault"
-  for env in staging production; do
+  for env in "${envs[@]}"; do
     jq -n --arg g "$(greeting "$env")" '{data: {GREETING: $g}}' \
       | curl -fsS -o /dev/null -X POST -H "X-Vault-Token: $(devops get VAULT_ROOT_TOKEN)" --data @- \
         "http://localhost:$(devops get VAULT_HOST_PORT)/v1/secret/data/$(devops get IMAGE_NAME)/$env" \
       || fail "could not write the secrets of $env to Vault"
   done
-  printf 'ok  GREETING of staging and production in Vault\n'
+  printf 'ok  GREETING of %s in Vault\n' "${envs[*]}"
 fi
 
 step "devops.sh run"
@@ -169,18 +196,24 @@ if [[ ,$WITH, == *,cosign,* ]]; then
 fi
 if [[ ,$WITH, == *,argocd,* ]]; then WITH+=,kubernetes; fi
 if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
+  # env_port <environment>: the port of the environment on this machine.
+  env_port() {
+    if [[ ,$WITH, == *,kubernetes,* ]]; then
+      devops get "KUBERNETES_$(upper "$1")_PORT"
+    else
+      devops get "DEPLOY_$(upper "$1")_PORT"
+    fi
+  }
   # app_check <environment>: prints the tag that runs and checks the answer.
   app_check() {
-    local env_upper port answer='' image kind
-    env_upper=$(tr '[:lower:]' '[:upper:]' <<< "$1")
+    local port answer='' image kind
+    port=$(env_port "$1")
     if [[ ,$WITH, == *,kubernetes,* ]]; then
-      port=$(devops get "KUBERNETES_${env_upper}_PORT")
       kind=deployment
-      [[ $1 == production && ,$WITH, == *,argocd,* ]] && kind=rollouts.argoproj.io
+      [[ $1 == "$last" && ,$WITH, == *,argocd,* ]] && kind=rollouts.argoproj.io
       image=$(devops compose exec -T k3s kubectl get "$kind" "$(devops get IMAGE_NAME)" \
         --namespace "$(devops get IMAGE_NAME)-$1" --output 'jsonpath={.spec.template.spec.containers[0].image}')
     else
-      port=$(devops get "DEPLOY_${env_upper}_PORT")
       image=$(docker inspect --format '{{.Config.Image}}' "$(devops get IMAGE_NAME)-$1-app-1")
     fi
     for _ in $(seq 30); do
@@ -198,18 +231,29 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     fi
     printf '%s\n' "${image##*:}"
   }
-  prod_port=$(devops get DEPLOY_PRODUCTION_PORT 2> /dev/null || devops get KUBERNETES_PRODUCTION_PORT)
+  # release <tag> <first|next>: after the pipeline ran, the environments up
+  # to the first approval run <tag>; each approval in turn deploys the next
+  # ones.  The first time, an environment that needs approval must not have
+  # been deployed before it.
+  release() {
+    local tag=$1 round=$2 env
+    for env in "${envs[@]}"; do
+      if needs_approval "$env"; then
+        if [[ $round == first ]]; then
+          ! curl -fsS -o /dev/null "http://localhost:$(env_port "$env")/actuator/health" 2> /dev/null \
+            || fail "$env was deployed without approval"
+          printf 'ok  %s waits for the approval\n' "$env"
+        fi
+        step "devops.sh run --phase $env"
+        devops run --phase "$env"
+      fi
+      [[ $(app_check "$env") == "$tag" ]] || fail "$env does not run $tag"
+      printf 'ok  %s runs %s\n' "$env" "$tag"
+    done
+  }
+  prod_port=$(env_port "$last")
   first=$(git -C "$project" rev-parse --short=12 HEAD)
-  [[ $(app_check staging) == "$first" ]] || fail "staging does not run $first"
-  printf 'ok  staging runs %s\n' "$first"
-  ! curl -fsS -o /dev/null "http://localhost:$prod_port/actuator/health" 2> /dev/null \
-    || fail "production was deployed without approval"
-  printf 'ok  production waits for the approval\n'
-
-  step "devops.sh run --phase prod"
-  devops run --phase prod
-  [[ $(app_check production) == "$first" ]] || fail "production does not run $first"
-  printf 'ok  production runs %s\n' "$first"
+  release "$first" first
 
   step "A second commit, then rollback"
   printf '\nChanged by the end-to-end test.\n' >> "$project/README.md"
@@ -217,27 +261,26 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
   git -C "$project" push -q origin main
   second=$(git -C "$project" rev-parse --short=12 HEAD)
   run_pipeline
-  devops run --phase prod
-  [[ $(app_check production) == "$second" ]] || fail "production does not run $second"
-  printf 'ok  production runs %s\n' "$second"
-  devops rollback production
-  [[ $(app_check production) == "$first" ]] || fail "rollback did not bring back $first"
+  release "$second" next
+  devops rollback "$last"
+  [[ $(app_check "$last") == "$first" ]] || fail "rollback did not bring back $first"
   printf 'ok  rollback brought back %s\n' "$first"
   if [[ ,$WITH, == *,postgresql,* ]]; then
-    # One visit per check of production: the data outlived two deployments.
-    [[ $(cat "$WORK/visits-production") == 3 ]] || fail "production's database lost visits: $(cat "$WORK/visits-production")"
-    printf 'ok  production kept its data through the releases\n'
+    # One visit per check of the last environment: the data outlived two deployments.
+    [[ $(cat "$WORK/visits-$last") == 3 ]] || fail "$last's database lost visits: $(cat "$WORK/visits-$last")"
+    printf 'ok  %s kept its data through the releases\n' "$last"
   fi
 fi
 if [[ ,$WITH, == *,k6,* ]]; then
+  tested=$(devops get LOAD_TEST_ENVIRONMENT)
   if [[ $ORCHESTRATOR == maven ]]; then
     requests=$(jq '.metrics.http_reqs.count' "$project/target/load-test.json")
     (( requests > 0 )) || fail "the load test made no requests"
-    printf 'ok  the load test of staging made %s requests\n' "$requests"
+    printf 'ok  the load test of %s made %s requests\n' "$tested" "$requests"
   fi
   if [[ ,$WITH, == *,prometheus,* ]]; then
     k6=$(curl -fsS -G "http://localhost:$(devops get PROMETHEUS_HOST_PORT)/api/v1/query" \
-      --data-urlencode 'query=sum(k6_http_reqs_total{environment="staging"})' | jq -r '.data.result[0].value[1] // empty')
+      --data-urlencode "query=sum(k6_http_reqs_total{environment=\"$tested\"})" | jq -r '.data.result[0].value[1] // empty')
     [[ $k6 =~ ^[1-9] ]] || fail "Prometheus has no load test metrics: $k6"
     printf 'ok  Prometheus has the load test results (%s requests)\n' "$k6"
   fi
@@ -247,7 +290,7 @@ if [[ ,$WITH, == *,prometheus,* ]]; then
   prometheus="http://localhost:$(devops get PROMETHEUS_HOST_PORT)"
   # query <PromQL>: the first value of the result, empty when there is none.
   query() { curl -fsS -G "$prometheus/api/v1/query" --data-urlencode "query=$1" | jq -r '.data.result[0].value[1] // empty'; }
-  for env in staging production; do
+  for env in "${envs[@]}"; do
     up=''
     for _ in $(seq 40); do
       up=$(query "up{job=\"app\", environment=\"$env\"}")
@@ -256,16 +299,16 @@ if [[ ,$WITH, == *,prometheus,* ]]; then
     done
     [[ $up == 1 ]] || fail "Prometheus does not scrape $env: up=$up"
   done
-  # A request to production, until a scrape of the running pods has it.
+  # A request to the last environment, until a scrape of the running pods has it.
   requests=''
   for _ in $(seq 40); do
     curl -fsS -o /dev/null "http://localhost:$prod_port/hello?name=metrics" || true
-    requests=$(query 'sum(http_server_requests_seconds_count{job="app", environment="production", uri="/hello"})')
+    requests=$(query "sum(http_server_requests_seconds_count{job=\"app\", environment=\"$last\", uri=\"/hello\"})")
     [[ $requests =~ ^[1-9] ]] && break
     sleep 3
   done
-  [[ $requests =~ ^[1-9] ]] || fail "Prometheus has no requests of production: $requests"
-  printf 'ok  Prometheus scrapes staging and production (%s requests to production)\n' "$requests"
+  [[ $requests =~ ^[1-9] ]] || fail "Prometheus has no requests of $last: $requests"
+  printf 'ok  Prometheus scrapes %s (%s requests to %s)\n' "${envs[*]}" "$requests" "$last"
   grafana="http://admin:$(devops get GRAFANA_ADMIN_PASSWORD)@localhost:$(devops get GRAFANA_HOST_PORT)"
   curl -fsS "$grafana/api/search?query=Application" | jq -e 'map(.title) | index("Application")' > /dev/null \
     || fail "Grafana has no Application dashboard"
@@ -277,12 +320,12 @@ if [[ ,$WITH, == *,loki,* ]]; then
   lines=0
   for _ in $(seq 40); do
     lines=$(curl -fsS -G "http://localhost:$(devops get LOKI_HOST_PORT)/loki/api/v1/query_range" \
-      --data-urlencode 'query={environment="production"}' --data-urlencode limit=100 \
+      --data-urlencode "query={environment=\"$last\"}" --data-urlencode limit=100 \
       | jq '[.data.result[].values | length] | add // 0')
     (( lines > 0 )) && break
     sleep 3
   done
-  (( lines > 0 )) || fail "Loki has no logs of production"
-  printf 'ok  Loki has %s log lines of production\n' "$lines"
+  (( lines > 0 )) || fail "Loki has no logs of $last"
+  printf 'ok  Loki has %s log lines of %s\n' "$lines" "$last"
 fi
-printf '\nEnd-to-end test passed: %s with %s\n' "$ORCHESTRATOR" "$WITH"
+printf '\nEnd-to-end test passed: %s with %s (%s)\n' "$ORCHESTRATOR" "$WITH" "${envs[*]}"

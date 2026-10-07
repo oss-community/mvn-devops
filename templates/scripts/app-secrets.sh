@@ -27,10 +27,11 @@ json() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 settings='{}'
 if [ "${DATABASE_ENGINE:-}" = postgresql ] && [ -n "$db_host" ]; then
   case $environment in
-    staging) password=${DATABASE_STAGING_PASSWORD:-} ;;
-    production) password=${DATABASE_PRODUCTION_PASSWORD:-} ;;
-    *) password='' ;;
+    *[!a-z0-9]*) echo "app-secrets.sh: invalid environment '$environment'" >&2; exit 2 ;;
   esac
+  key=$(printf '%s' "$environment" | tr '[:lower:]' '[:upper:]')
+  password=''
+  eval "password=\${DATABASE_${key}_PASSWORD:-}"
   settings="{\"SPRING_DATASOURCE_URL\": $(json "jdbc:postgresql://$db_host:5432/$DATABASE_NAME"),"
   settings="$settings \"SPRING_DATASOURCE_USERNAME\": $(json "$DATABASE_NAME"), \"SPRING_DATASOURCE_PASSWORD\": $(json "$password")}"
 fi

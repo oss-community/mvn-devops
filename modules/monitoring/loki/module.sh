@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Logs of the deployed application in Loki, searchable in Grafana (the
 # dashboard "Application logs", logs.json) with the labels application,
-# environment (staging, production), container and source.  Grafana Alloy
+# environment, container and source.  Grafana Alloy
 # collects them: from the containers of the simulated machine of docker-host,
 # which run on this Docker daemon, and from the pods of k3s.  Machines and
 # clusters of their own need an Alloy (or another agent) there that pushes to
@@ -12,9 +12,12 @@ module_secrets() {
 }
 
 alloy_config() {
-  local app pattern
+  local app pattern env paths=''
   app=$(image_app_name)
-  pattern="${app//./\\\\.}-(staging|production)"
+  pattern="${app//./\\\\.}-(${ENVIRONMENTS// /|})"
+  for env in $ENVIRONMENTS; do
+    paths+="    {\"__path__\" = \"/var/log/pods/$app-${env}_*/*/*.log\", \"application\" = \"$app\", \"environment\" = \"$env\", \"source\" = \"kubernetes\"},"$'\n'
+  done
   cat <<EOF
 // Written by mvn-devops (monitoring/loki); changes are overwritten.
 
@@ -58,9 +61,7 @@ loki.source.docker "app" {
 // Pods of the namespaces <app>-<environment> in k3s.
 local.file_match "pods" {
   path_targets = [
-    {"__path__" = "/var/log/pods/$app-staging_*/*/*.log", "application" = "$app", "environment" = "staging", "source" = "kubernetes"},
-    {"__path__" = "/var/log/pods/$app-production_*/*/*.log", "application" = "$app", "environment" = "production", "source" = "kubernetes"},
-  ]
+$paths  ]
 }
 
 loki.source.file "pods" {
@@ -95,7 +96,9 @@ module_prepare() {
   local dir="$DEVOPS_STATE/monitoring"
   mkdir -p "$dir/alloy" "$dir/grafana/dashboards"
   alloy_config > "$dir/alloy/config.alloy"
-  cp "$(module_dir monitoring/loki)/logs.json" "$dir/grafana/dashboards/"
+  # The environment filter offers the project's environments.
+  sed "s/\"query\": \"staging,production\"/\"query\": \"${ENVIRONMENTS// /,}\"/" \
+    "$(module_dir monitoring/loki)/logs.json" > "$dir/grafana/dashboards/logs.json"
 }
 
 module_configure() {

@@ -14,10 +14,7 @@
 #
 # Secrets in Vault with the same names win, e.g. for a managed database.
 
-ENVIRONMENTS='staging production'
 POSTGRES_VERSION=18
-
-upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 
 # Database and user name: the application name as an SQL identifier.
 database_name() {

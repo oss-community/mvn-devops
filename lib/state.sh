@@ -148,6 +148,9 @@ mask() {
 # The answer is stored in .devops/values and shared through devops.conf.
 # devops.conf wins over the local value unless DEVOPS_RECONFIGURE=1, so the
 # whole team uses the committed answers; an existing local value is kept.
+# With a ready-made pipeline (DEVOPS_PRESET=1, see pipelines/) the default is
+# taken without asking, except for personal answers and secrets that have
+# none, such as the GitHub user and token.
 ask() {
   local key=$1 question=$2 default=${3:-} current answer shared=1 team
   [[ ${DEVOPS_ASK_LOCAL:-0} == 1 ]] && shared=0
@@ -165,8 +168,9 @@ ask() {
     return
   fi
   current=$(value "$key" "$default")
-  if [[ ${DEVOPS_DEFAULTS:-0} == 1 ]]; then
+  if [[ ${DEVOPS_DEFAULTS:-0} == 1 ]] || { [[ ${DEVOPS_PRESET:-0} == 1 ]] && { (( shared )) || [[ -n $current ]]; }; }; then
     answer=$current
+    [[ ${DEVOPS_PRESET:-0} == 1 ]] && log_dim "  $key = $answer"
   else
     read -r -p "  $question [$current]: " answer || true
     answer=${answer:-$current}
@@ -191,7 +195,7 @@ ask_secret() {
     return
   fi
   current=$(value "$key" "$default")
-  if [[ ${DEVOPS_DEFAULTS:-0} == 1 ]]; then
+  if [[ ${DEVOPS_DEFAULTS:-0} == 1 ]] || [[ ${DEVOPS_PRESET:-0} == 1 && -n $current ]]; then
     answer=$current
   else
     shown='empty'
@@ -245,6 +249,7 @@ env_generate() {
     module_hook "$id" module_env
   done
   pipeline_var DEVOPS_SCRIPTS "$(pipeline_scripts_dir)"
+  deploys_application && pipeline_var ENVIRONMENTS "$(environments)"
   unset PIPELINE_VARS_FILE
 
   # Last definition wins, order of first appearance is kept.

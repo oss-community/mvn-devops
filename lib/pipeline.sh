@@ -5,10 +5,13 @@
 #
 #   stage <order> <phase> <name> "<maven arguments>"
 #
-#   order  number, stages run in ascending order
-#   phase  ci (build, verify), cd (publish, deploy to staging) or prod
-#          (deploy to production; runs only after someone approves it)
-#   name   short id, letters, digits and dashes
+#   order  number, stages of a phase run in ascending order
+#   phase  ci (build, verify), cd (publish the image and other artifacts) or
+#          the name of a deployment environment (lib/environments.sh); "prod"
+#          stands for the last environment.  Phases run in that order: ci, cd,
+#          then the environments in the order of ENVIRONMENTS.  An
+#          environment that needs approval runs only after someone approves.
+#   name   short id, letters, digits and dashes; unique in the pipeline
 #   args   arguments passed to mvn; may use $VARS from the pipeline env
 #
 #   shell_stage <order> <phase> <name> "<shell command>"
@@ -23,13 +26,49 @@ stage() {
   local order=$1 phase=$2 name=$3 args=$4
   [[ -n ${STAGES_FILE:-} ]] || die "stage used outside module_stages"
   [[ $order =~ ^[0-9]+$ ]] || die "stage '$name': order must be a number"
-  [[ $phase == ci || $phase == cd || $phase == prod ]] || die "stage '$name': phase must be ci, cd or prod"
+  if [[ $phase != ci && $phase != cd ]]; then
+    phase=$(env_resolve "$phase") || die "stage '$name': phase must be ci, cd or an environment ($(environments))"
+  fi
   [[ $name =~ ^[a-z0-9-]+$ ]] || die "stage '$name': use lowercase letters, digits and dashes"
   # Arguments are embedded in single-quoted strings by the orchestrators.
   case $args in
     *'|'* | *"'"* | *\\* | *'${'*) die "stage '$name': arguments may not contain | ' \\ or \${" ;;
   esac
-  printf '%s|%s|%s|%s\n' "$order" "$phase" "$name" "$args" >> "$STAGES_FILE"
+  printf '%s|%s|%s|%s|%s\n' "$(phase_rank "$phase")" "$order" "$phase" "$name" "$args" >> "$STAGES_FILE"
+}
+
+# phase_rank <phase>: position of a phase in the pipeline.
+phase_rank() {
+  local env rank=2
+  case $1 in
+    ci) printf 0; return ;;
+    cd) printf 1; return ;;
+  esac
+  for env in $(environments); do
+    [[ $env == "$1" ]] && break
+    rank=$((rank + 1))
+  done
+  printf '%s' "$rank"
+}
+
+# phase_group <phase>: the part of the pipeline a phase belongs to: ci, cd
+# (which includes the environments before the first approval) or the
+# environment whose approval starts it.
+phase_group() {
+  case $1 in
+    ci|cd) printf '%s' "$1" ;;
+    *) env_group "$1" ;;
+  esac
+}
+
+# Environments that wait for approval and have stages, in order.
+pipeline_gates() {
+  local phases gate
+  phases=" $(pipeline_stages | cut -d'|' -f2 | sort -u | xargs) "
+  for gate in $(env_gates); do
+    [[ $phases == *" $gate "* ]] && printf '%s\n' "$gate"
+  done
+  return 0
 }
 
 # Shell stages are stored with a leading "!".
@@ -56,7 +95,7 @@ pipeline_stages() {
     module_hook "$id" module_stages
   done
   unset STAGES_FILE
-  sort -t'|' -k1,1n "$tmp"
+  sort -t'|' -k1,1n -k2,2n "$tmp" | cut -d'|' -f2-
   rm -f "$tmp"
 }
 
@@ -80,14 +119,15 @@ maven_flags() {
   printf '%s' "$flags"
 }
 
-# True when a stage waits for the production approval.
-pipeline_has_prod() { pipeline_stages | grep -q '^[0-9]*|prod|'; }
-
 pipeline_print() {
-  local order phase name args
-  printf '%-6s %-4s %-16s %s\n' ORDER PHASE STAGE 'MAVEN ARGUMENTS'
+  local order phase name args shown=''
+  printf '%-6s %-12s %-24s %s\n' ORDER PHASE STAGE 'MAVEN ARGUMENTS'
   while IFS='|' read -r order phase name args; do
-    printf '%-6s %-4s %-16s %s\n' "$order" "$phase" "$name" "$args"
+    if [[ $phase != "$shown" && $(phase_group "$phase") == "$phase" ]] && is_environment "$phase"; then
+      printf '%-6s %-12s %-24s %s\n' - "$phase" approval "waits until someone approves $phase"
+    fi
+    shown=$phase
+    printf '%-6s %-12s %-24s %s\n' "$order" "$phase" "$name" "$args"
   done < <(pipeline_stages)
 }
 

@@ -28,6 +28,19 @@ GitHub release.
 - `examples/hello-api`, a small Spring Boot web application with a health
   endpoint, used by the deployment tests.
 - Stages can call scripts from `templates/scripts/` through `$DEVOPS_SCRIPTS`.
+- Deployment environments of the project's own: `ENVIRONMENTS` in
+  `devops.conf` lists them in order (e.g. `dev test staging prod`; default
+  `staging production`), and `ENV_<NAME>_APPROVAL` says which ones wait for
+  approval (by default the last). Every deployment module, the database,
+  monitoring, the load test and the orchestrators work with any number of
+  environments; Jenkins and Concourse get one approval per environment that
+  needs it. Stage phases are `ci`, `cd` or an environment's name, and
+  `prod` stands for the last environment.
+- Ready-made pipelines in `pipelines/`: tested combinations of tools with
+  their settings, e.g. `jenkins-sonarqube-nexus` or `jenkins-kubernetes`.
+  `devops.sh pipelines` lists them and `setup --pipeline <name or file>`
+  sets one up, asking only for what cannot be generated (the GitHub user and
+  token, the Nexus licence). See `docs/pipelines.md`.
 - Deployment to a machine (`docker-host`): Docker Compose over SSH, to staging
   in the cd phase and to production after an approval. Each deployment is
   checked at the application's health endpoint and the previous image is put

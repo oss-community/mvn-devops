@@ -3,19 +3,18 @@
 # does not touch the cluster: it writes the chart and the release of each
 # environment to the GitOps branch of the repository
 # (environments/<environment>/) and waits until Argo CD has synced it and the
-# application is healthy (templates/scripts/deploy-gitops.sh).  Production
-# can be released as a canary with Argo Rollouts.
+# application is healthy (templates/scripts/deploy-gitops.sh).  The last
+# environment can be released as a canary with Argo Rollouts.
 #
 # configure installs Argo CD (and Argo Rollouts) in the cluster and creates
 # one Argo CD Application per environment.
 
-ENVIRONMENTS='staging production'
 ARGOCD_VERSION=3.5.4
 ROLLOUTS_VERSION=1.10.0
 
 module_secrets() {
   ask GITOPS_BRANCH "Branch of the repository that holds the desired state" gitops
-  ask GITOPS_CANARY "Release production as a canary with Argo Rollouts (yes or no)" yes
+  ask GITOPS_CANARY "Release ${ENVIRONMENTS##* } as a canary with Argo Rollouts (yes or no)" yes
   server_external KUBERNETES || ask ARGOCD_HOST_PORT "Argo CD port on the Docker machine" 8443
 }
 
@@ -104,7 +103,7 @@ module_configure() {
     repository_secret | kubectl_host apply --filename - > /dev/null || die "Could not give Argo CD access to the repository"
   fi
   applications | kubectl_host apply --filename - > /dev/null || die "Could not create the Argo CD applications"
-  log_ok "Applications $(image_app_name)-staging and -production follow $(gitops_repo_url) ($(value GITOPS_BRANCH gitops))"
+  log_ok "Applications $(image_app_name)-{${ENVIRONMENTS// /,}} follow $(gitops_repo_url) ($(value GITOPS_BRANCH gitops))"
 }
 
 module_env() {
@@ -113,20 +112,17 @@ module_env() {
 }
 
 module_stages() {
-  shell_stage 80 cd deploy-staging "sh \"\$DEVOPS_SCRIPTS/deploy-gitops.sh\" staging"
-  shell_stage 90 prod deploy-production "sh \"\$DEVOPS_SCRIPTS/deploy-gitops.sh\" production"
+  local env
+  for env in $ENVIRONMENTS; do
+    shell_stage 80 "$env" "deploy-$env" "sh \"\$DEVOPS_SCRIPTS/deploy-gitops.sh\" $env"
+  done
 }
 
-# rollback [staging|production] [--to TAG]: a commit to the GitOps branch.
+# rollback [environment] [--to TAG]: a commit to the GitOps branch.
 module_rollback() {
-  local env=production tag=''
-  while (( $# )); do
-    case $1 in
-      staging|production) env=$1; shift ;;
-      --to) tag=${2:?--to needs a tag}; shift 2 ;;
-      *) die "rollback: unknown option $1 (use [staging|production] [--to TAG])" ;;
-    esac
-  done
+  local env tag
+  rollback_args "$@"
+  env=$ROLLBACK_ENV tag=$ROLLBACK_TAG
   log_step "Rollback of $env${tag:+ to $tag}"
   (
     source_pipeline_env

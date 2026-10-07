@@ -75,16 +75,22 @@ menu_pick() {
 }
 
 cmd_init() {
-  local orchestrator='' with='' name='' id category mode title conf
+  local orchestrator='' with='' name='' preset='' id category mode title conf
   local -a selected=() current=()
   while (( $# )); do
     case $1 in
       --orchestrator) orchestrator=$2; shift 2 ;;
       --with) with=$2; shift 2 ;;
       --name) name=$2; shift 2 ;;
+      --pipeline) preset=$(preset_file "${2:?--pipeline needs a name or file}"); shift 2 ;;
       *) die "init: unknown option $1" ;;
     esac
   done
+  if [[ -n $preset ]]; then
+    [[ -z $orchestrator && -z $with ]] || die "--pipeline sets the orchestrator and the tools; leave out --orchestrator and --with"
+    orchestrator=$(preset_get "$preset" ORCHESTRATOR) || die "$preset has no ORCHESTRATOR"
+    with=$(preset_get "$preset" TOOLS || true)
+  fi
 
   if profile_read; then
     read -r -a current <<< "${MODULES:-}"
@@ -128,6 +134,10 @@ cmd_init() {
   done
   [[ -n $ORCHESTRATOR ]] || die "An orchestrator must be selected"
   profile_save
+  if [[ -n $preset ]]; then
+    preset_apply "$preset"
+    log_ok "Ready-made pipeline $(preset_name "$preset"): $(preset_description "$preset")"
+  fi
 
   log_step "Selected modules"
   for id in $MODULES; do
@@ -144,8 +154,14 @@ cmd_secrets() {
   [[ ${1:-} == --reconfigure ]] && export DEVOPS_RECONFIGURE=1
   load_project
   state_ensure_dirs
+  # A ready-made pipeline asks only what has no default.
+  if preset_selected && [[ ${DEVOPS_RECONFIGURE:-0} != 1 ]]; then export DEVOPS_PRESET=1; fi
   log_step "Docker machine"
   ask_local DEVOPS_HOST "Address of the machine Docker runs on, for the tools started in Docker" "$(docker_host_default)"
+  if deploys_application; then
+    log_step "Environments"
+    environments_secrets
+  fi
   modules_hook module_secrets
   env_generate
   log_ok "Values stored in $DEVOPS_VALUES"
@@ -242,8 +258,9 @@ cmd_run() {
 }
 
 cmd_setup() {
-  # Options are passed to init (e.g. --orchestrator jenkins --with sonarqube,nexus).
-  if ! profile_exists; then
+  # Options are passed to init (e.g. --orchestrator jenkins --with sonarqube,nexus,
+  # or --pipeline jenkins-sonarqube-nexus).
+  if ! profile_exists || (( $# )); then
     cmd_init "$@"
   fi
   cmd_secrets

@@ -122,14 +122,15 @@ for orchestrator in maven jenkins concourse; do
     concourse) grep -q 'base64 -d | tar -xzf - -C .devops' "$project/.devops/generated/concourse/pipeline.yml" || fail "image: concourse scripts" ;;
   esac
 done
-# Deployment: staging in cd, production in prod behind an approval.
+# Deployment: staging, then production behind an approval.
 for orchestrator in maven jenkins concourse; do
   rm -rf "$project/.devops" "$project/devops.conf"
   devops init --orchestrator "$orchestrator" --with docker-registry,docker-host > /dev/null
   devops secrets > /dev/null
   stages=$(devops stages)
-  grep -q '^80 *cd *deploy-staging ' <<< "$stages" || fail "deploy: $orchestrator has no staging stage"
-  grep -q '^90 *prod *deploy-production ' <<< "$stages" || fail "deploy: $orchestrator has no production stage"
+  grep -q '^80 *staging *deploy-staging ' <<< "$stages" || fail "deploy: $orchestrator has no staging stage"
+  grep -q '^- *production *approval ' <<< "$stages" || fail "deploy: $orchestrator production needs no approval"
+  grep -q '^80 *production *deploy-production ' <<< "$stages" || fail "deploy: $orchestrator has no production stage"
   devops render > /dev/null
   case $orchestrator in
     maven)
@@ -140,12 +141,12 @@ for orchestrator in maven jenkins concourse; do
       grep -q 'deploy-production' <<< "$run_out" || fail "deploy: maven --phase prod" ;;
     jenkins)
       jenkinsfile="$project/.devops/generated/Jenkinsfile"
-      grep -q "input id: 'Production'" "$jenkinsfile" || fail "deploy: jenkins has no approval"
+      grep -q "input id: 'Production', message: 'Deploy to production?'" "$jenkinsfile" || fail "deploy: jenkins has no approval"
       [[ $(grep -n "approve-production" "$jenkinsfile" | cut -d: -f1) -lt $(grep -n "stage('deploy-production')" "$jenkinsfile" | cut -d: -f1) ]] \
         || fail "deploy: jenkins approval is not before production" ;;
     concourse)
-      grep -q 'name: prod' "$project/.devops/generated/concourse/pipeline.yml" || fail "deploy: concourse has no prod job"
-      grep -q 'passed: \[cd\]' "$project/.devops/generated/concourse/pipeline.yml" || fail "deploy: concourse prod job does not follow cd" ;;
+      grep -q 'name: production' "$project/.devops/generated/concourse/pipeline.yml" || fail "deploy: concourse has no production job"
+      grep -q 'passed: \[cd\]' "$project/.devops/generated/concourse/pipeline.yml" || fail "deploy: concourse production job does not follow cd" ;;
   esac
   [[ $(devops env --show | grep '^DEPLOY_STAGING_TARGET=') == "DEPLOY_STAGING_TARGET=root@$( [[ $orchestrator == maven ]] && echo localhost || echo deploy-host)" ]] \
     || fail "deploy: $orchestrator reaches the simulated machine at the wrong address"
@@ -157,7 +158,7 @@ for orchestrator in maven jenkins; do
   devops secrets > /dev/null
   stages=$(devops stages)
   grep -q 'deploy-helm.sh" staging' <<< "$stages" || fail "kubernetes: $orchestrator has no staging stage"
-  grep -q '^90 *prod *deploy-production .*deploy-helm.sh" production' <<< "$stages" || fail "kubernetes: $orchestrator production"
+  grep -q '^80 *production *deploy-production .*deploy-helm.sh" production' <<< "$stages" || fail "kubernetes: $orchestrator production"
   mkdir -p "$project/.devops/k3s"
   printf 'apiVersion: v1\nclusters:\n- cluster:\n    server: https://127.0.0.1:6443\n' > "$project/.devops/k3s/kubeconfig.yaml"
   server=$(devops env --show > /dev/null; base64 -d < <(sed -n 's/^export KUBECONFIG_B64=//p' "$project/.devops/env/pipeline.sh" | tr -d "'") | sed -n 's/ *server: //p')
@@ -181,6 +182,40 @@ devops init --orchestrator maven --with docker-host > /dev/null
 ! devops secrets > /dev/null 2>&1 || fail "deploy: accepted without an image module"
 printf 'ok  deploy\n'
 
+# Environments of the project's own: dev test staging prod, with approvals
+# before staging and prod.  Ports count up from the last environment.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with docker-registry,kubernetes,cosign,k6,postgresql > /dev/null
+printf 'ENVIRONMENTS=dev test staging prod\nENV_STAGING_APPROVAL=yes\n' >> "$project/devops.conf"
+mkdir -p "$project/.devops/values" && printf '%s' "$WORK/cosign.key" > "$project/.devops/values/COSIGN_KEY_FILE"
+printf 'unused' > "$WORK/cosign.key"; printf 'unused' > "$WORK/cosign.pub"
+devops secrets > /dev/null
+stages=$(devops stages | awk 'NR > 1 { print $2 ":" $3 }' | tr '\n' ' ')
+[[ $stages == *"cd:sign-image dev:deploy-dev test:deploy-test staging:approval staging:verify-image-staging staging:deploy-staging staging:load-test prod:approval prod:verify-image-prod prod:deploy-prod "* ]] \
+  || fail "environments: stages $stages"
+run_out=$(devops run --dry-run 2>&1)
+grep -q '\] deploy-test' <<< "$run_out" || fail "environments: test is not deployed"
+! grep -q '\] deploy-staging' <<< "$run_out" || fail "environments: staging deployed without approval"
+grep -q "staging waits for approval" <<< "$run_out" || fail "environments: no hint at the staging approval"
+run_out=$(devops run --dry-run --phase staging 2>&1)
+grep -q '\] load-test' <<< "$run_out" || fail "environments: --phase staging does not load test"
+! grep -q '\] deploy-prod' <<< "$run_out" || fail "environments: --phase staging deploys prod"
+grep -q "prod waits for approval" <<< "$run_out" || fail "environments: no hint at the prod approval"
+run_out=$(devops run --dry-run --phase production 2>&1)
+grep -q '\] deploy-prod' <<< "$run_out" || fail "environments: production does not stand for prod"
+env_out=$(devops env --show)
+grep -qx 'ENVIRONMENTS=dev test staging prod' <<< "$env_out" || fail "environments: not in the pipeline"
+grep -q '^DATABASE_DEV_PASSWORD=\*' <<< "$env_out" || fail "environments: dev has no database password"
+[[ $(devops get KUBERNETES_DEV_PORT):$(devops get KUBERNETES_PROD_PORT) == 8283:8280 ]] || fail "environments: ports"
+# "up" with a docker that does nothing writes the configuration.
+mkdir -p "$WORK/fake-bin" && printf '#!/bin/sh\nexit 0\n' > "$WORK/fake-bin/docker" && chmod +x "$WORK/fake-bin/docker"
+PATH="$WORK/fake-bin:$PATH" devops up > /dev/null
+grep -q '"8283:30083"' "$project/.devops/generated/compose/deploy-kubernetes.yml" || fail "environments: k3s does not publish dev"
+grep -qx 'LOAD_TEST_ENVIRONMENT=staging' "$project/devops.conf" || fail "environments: load test not before the last"
+printf 'ENVIRONMENTS=dev Test\n' >> "$project/devops.conf"
+! devops secrets > /dev/null 2>&1 || fail "environments: invalid name accepted"
+printf 'ok  environments\n'
+
 # Image security: SBOM, scan and signature after the image, verification before production.
 rm -rf "$project/.devops" "$project/devops.conf"
 devops init --orchestrator concourse --with docker-registry,docker-host,trivy,syft,cosign > /dev/null
@@ -188,7 +223,7 @@ mkdir -p "$project/.devops/values" && printf '%s' "$WORK/cosign.key" > "$project
 printf 'unused' > "$WORK/cosign.key"; printf 'unused' > "$WORK/cosign.pub"
 devops secrets > /dev/null
 stages=$(devops stages | awk 'NR > 1 { print $1 ":" $3 }' | tr '\n' ' ')
-[[ $stages == *"75:image 76:sbom 77:scan-image 78:sign-image 80:deploy-staging 89:verify-image 90:deploy-production "* ]] \
+[[ $stages == *"75:image 76:sbom 77:scan-image 78:sign-image 80:deploy-staging -:approval 79:verify-image-production 80:deploy-production "* ]] \
   || fail "security: stage order $stages"
 devops render > /dev/null
 grep -q 'path: .tools' "$project/.devops/generated/concourse/pipeline.yml" || fail "security: concourse does not cache tools"
@@ -258,8 +293,6 @@ rm -rf "$project/.devops" "$project/devops.conf"
 devops init --orchestrator maven --with docker-registry,docker-host,loki > /dev/null
 grep -q 'monitoring/prometheus' "$project/devops.conf" || fail "loki: prometheus module not added"
 devops secrets > /dev/null
-# "up" with a docker that does nothing writes the configuration.
-mkdir -p "$WORK/fake-bin" && printf '#!/bin/sh\nexit 0\n' > "$WORK/fake-bin/docker" && chmod +x "$WORK/fake-bin/docker"
 PATH="$WORK/fake-bin:$PATH" devops up > /dev/null
 monitoring="$project/.devops/monitoring"
 grep -q 'host.docker.internal:8181' "$monitoring/prometheus/prometheus.yml" || fail "prometheus: staging target missing"
@@ -277,7 +310,7 @@ for orchestrator in maven jenkins; do
   devops init --orchestrator "$orchestrator" --with docker-registry,kubernetes,k6,prometheus > /dev/null
   devops secrets > /dev/null
   stages=$(devops stages | awk 'NR > 1 { print $1 ":" $3 }' | tr '\n' ' ')
-  [[ $stages == *"80:deploy-staging 85:load-test 90:deploy-production "* ]] || fail "k6: stage order $stages"
+  [[ $stages == *"80:deploy-staging 85:load-test -:approval 80:deploy-production "* ]] || fail "k6: stage order $stages"
   env_out=$(devops env --show)
   expected=http://localhost:8281; [[ $orchestrator == jenkins ]] && expected=http://host.docker.internal:8281
   grep -qx "LOAD_TEST_URL=$expected" <<< "$env_out" || fail "k6: $orchestrator calls staging at the wrong address"
@@ -288,6 +321,36 @@ rm -rf "$project/.devops" "$project/devops.conf"
 devops init --orchestrator maven --with k6 > /dev/null
 ! devops secrets > /dev/null 2>&1 || fail "k6: accepted without a deployment or LOAD_TEST_URL"
 printf 'ok  load test\n'
+
+# Ready-made pipelines: each one sets up and renders without questions.
+[[ $(devops pipelines | grep -c '^  [a-z]') == $(find "$ROOT/pipelines" -name '*.conf' | wc -l | tr -d ' ') ]] \
+  || fail "pipelines: not every ready-made pipeline is listed"
+for file in "$ROOT"/pipelines/*.conf; do
+  name=$(basename "$file" .conf)
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --pipeline "$name" > /dev/null
+  grep -qx "PIPELINE=$name" "$project/devops.conf" || fail "pipelines: $name not recorded"
+  grep -qx "ORCHESTRATOR=$(sed -n 's/^ORCHESTRATOR=//p' "$file")" "$project/devops.conf" || fail "pipelines: $name orchestrator"
+  if grep -q '^TOOLS=.*cosign' "$file"; then
+    mkdir -p "$project/.devops/values" && printf '%s' "$WORK/cosign.key" > "$project/.devops/values/COSIGN_KEY_FILE"
+  fi
+  devops secrets > /dev/null || fail "pipelines: $name secrets"
+  devops render > /dev/null || fail "pipelines: $name render"
+done
+# Without -y only what has no default is asked: the GitHub token and the
+# Nexus licence; the rest, passwords included, is taken or generated.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --pipeline maven-sonarqube-nexus > /dev/null
+"$ROOT/devops.sh" -p "$project" secrets <<< $'a-token\nyes' > /dev/null
+[[ $(devops get GITHUB_TOKEN):$(devops get NEXUS_ACCEPT_EULA) == a-token:yes ]] || fail "pipelines: questions in the wrong order"
+[[ -n $(devops get SONAR_ADMIN_PASSWORD) ]] || fail "pipelines: no generated password"
+# A file of the project's own works the same way.
+printf '# Own pipeline.\nORCHESTRATOR=maven\nTOOLS=sonarqube\nSONAR_HOST_PORT=9100\n' > "$WORK/own.conf"
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --pipeline "$WORK/own.conf" > /dev/null
+grep -qx 'SONAR_HOST_PORT=9100' "$project/devops.conf" || fail "pipelines: own file not applied"
+! devops init --pipeline no-such-pipeline > /dev/null 2>&1 || fail "pipelines: unknown name accepted"
+printf 'ok  pipelines\n'
 
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"

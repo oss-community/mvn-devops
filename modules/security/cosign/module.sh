@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Signs the pushed image with a Cosign key pair of the project
 # (templates/scripts/sign-image.sh) and, with a deployment module, checks the
-# signature before production (verify-image.sh).  Signatures stay in the
+# signature before each environment that needs approval (verify-image.sh).  Signatures stay in the
 # image's registry; the public Sigstore services are not used.
 
 module_secrets() {
@@ -45,9 +45,11 @@ module_env() {
 
 module_stages() {
   shell_stage 78 cd sign-image "sh \"\$DEVOPS_SCRIPTS/sign-image.sh\""
-  if [[ " $MODULES " == *" deploy/"* ]]; then
-    shell_stage 89 prod verify-image "sh \"\$DEVOPS_SCRIPTS/verify-image.sh\""
-  fi
+  local env
+  deploys_application || return 0
+  for env in $(env_gates); do
+    shell_stage 79 "$env" "verify-image-$env" "sh \"\$DEVOPS_SCRIPTS/verify-image.sh\""
+  done
 }
 
 module_urls() {

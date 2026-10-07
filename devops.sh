@@ -29,6 +29,8 @@ export DEVOPS_HOME DEVOPS_CMD
 source "$DEVOPS_HOME/lib/log.sh"
 # shellcheck source=lib/state.sh
 source "$DEVOPS_HOME/lib/state.sh"
+# shellcheck source=lib/environments.sh
+source "$DEVOPS_HOME/lib/environments.sh"
 # shellcheck source=lib/modules.sh
 source "$DEVOPS_HOME/lib/modules.sh"
 # shellcheck source=lib/maven.sh
@@ -47,6 +49,8 @@ source "$DEVOPS_HOME/lib/commands.sh"
 source "$DEVOPS_HOME/lib/release.sh"
 # shellcheck source=lib/upgrade.sh
 source "$DEVOPS_HOME/lib/upgrade.sh"
+# shellcheck source=lib/presets.sh
+source "$DEVOPS_HOME/lib/presets.sh"
 
 usage() {
   cat <<EOF
@@ -55,6 +59,8 @@ Usage: $DEVOPS_CMD [options] <command> [args]
 Setup
   init         choose orchestrator and tools (interactive menu)
                  --orchestrator <name> --with <a,b,c>   non-interactive
+                 --pipeline <name|file>                 a ready-made pipeline
+  pipelines    list the ready-made pipelines (pipelines/)
   setup        init (if needed) + secrets + up + configure + publish
   secrets      ask for the values each selected tool needs  [--reconfigure]
   up           prepare and start the tool containers
@@ -64,9 +70,10 @@ Setup
 Pipeline
   stages       show the stages contributed by the selected tools
   render       generate the pipeline files into .devops/generated
-  run          run the pipeline  (maven: [--dry-run] [--from s] [--only s] [--phase ci|cd|prod])
-                 --phase prod   approve and run the production stages
-  rollback     put the previous image back  [staging|production] [--to TAG]
+  run          run the pipeline  (maven: [--dry-run] [--from s] [--only s] [--phase ci|cd|<env>])
+                 --phase <env>  approve an environment and deploy to it
+                                ("prod" stands for the last environment)
+  rollback     put the previous image back  [environment] [--to TAG]
   release      release version, deploy, next snapshot, push
                  [--version X] [--next Y-SNAPSHOT] [--dry-run] [--no-push]
 
@@ -112,7 +119,7 @@ main() {
 
   local command=$1; shift
   case $command in
-    init|setup|secrets|up|configure|publish|stages|render|run|rollback|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release|upgrade)
+    init|setup|secrets|up|configure|publish|stages|render|run|rollback|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release|upgrade|pipelines)
       "cmd_$command" "$@" ;;
     export-compose) cmd_export_compose "$@" ;;
     help) usage ;;

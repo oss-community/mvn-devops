@@ -30,7 +30,12 @@ module_secrets() {
   ask_local GITHUB_EMAIL "GitHub email" "$(git config --global user.email 2>/dev/null || true)"
   log_dim "  Token scopes: repo (+ write:packages, read:packages without a packages token). See docs/github-setup.md"
   ask_secret GITHUB_TOKEN "GitHub personal access token"
-  ask_secret GITHUB_PACKAGE_TOKEN "GitHub Packages token (empty: use the token above)"
+  # A ready-made pipeline uses the token above, unless GitHub Packages is selected.
+  if [[ ${DEVOPS_PRESET:-0} == 1 && " $MODULES " != *" artifact/github-packages "* ]] && ! has_value GITHUB_PACKAGE_TOKEN; then
+    set_value GITHUB_PACKAGE_TOKEN '' secret
+  else
+    ask_secret GITHUB_PACKAGE_TOKEN "GitHub Packages token (empty: use the token above)"
+  fi
 }
 
 module_env() {

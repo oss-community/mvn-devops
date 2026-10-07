@@ -4,7 +4,7 @@
 # Stage script of the deploy/docker-host module; "devops.sh rollback" runs it
 # too.
 #
-#   deploy-compose.sh <staging|production> [deploy [TAG] | rollback [TAG]]
+#   deploy-compose.sh <environment> [deploy [TAG] | rollback [TAG]]
 #
 # deploy uses the image of the current commit by default; rollback the image
 # that ran before the current one.  The machine keeps one directory per
@@ -17,11 +17,13 @@ set -eu
 environment=$1
 action=${2:-deploy}
 tag=${3:-}
-case $environment in
-  staging) target=$DEPLOY_STAGING_TARGET ssh_port=$DEPLOY_STAGING_SSH_PORT port=$DEPLOY_STAGING_PORT ;;
-  production) target=$DEPLOY_PRODUCTION_TARGET ssh_port=$DEPLOY_PRODUCTION_SSH_PORT port=$DEPLOY_PRODUCTION_PORT ;;
+case " ${ENVIRONMENTS:-staging production} " in
+  *" $environment "*) ;;
   *) echo "deploy-compose.sh: unknown environment '$environment'" >&2; exit 2 ;;
 esac
+key=$(printf '%s' "$environment" | tr '[:lower:]' '[:upper:]')
+target='' ssh_port='' port=''
+eval "target=\$DEPLOY_${key}_TARGET ssh_port=\$DEPLOY_${key}_SSH_PORT port=\$DEPLOY_${key}_PORT"
 case $action in
   deploy) [ -n "$tag" ] || tag=$(git rev-parse --short=12 HEAD) ;;
   rollback) ;;

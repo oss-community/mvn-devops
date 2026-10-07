@@ -1,15 +1,13 @@
 # shellcheck shell=bash
 # Metrics of the deployed application: Prometheus scrapes the actuator's
 # Prometheus endpoint (/actuator/prometheus, from micrometer-registry-prometheus
-# in the project) of each environment, labelled environment=staging or
-# production, and alerts when an environment is down or fails requests.
+# in the project) of each environment, labelled with the environment's name,
+# and alerts when an environment is down or fails requests.
 # Grafana shows them on the dashboard "Application" (grafana/application.json).
 #
 # The environments are found from the deploy module: the machines of
 # docker-host, or the ports of k3s.  The deployments expose the endpoint
 # (MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE, templates/scripts/app-secrets.sh).
-
-ENVIRONMENTS='staging production'
 
 module_secrets() {
   ask PROMETHEUS_HOST_PORT "Prometheus port on the Docker machine" 9090
@@ -85,7 +83,7 @@ module_configure() {
   wait_http "$(host_url "$(value GRAFANA_HOST_PORT 3000)" /api/health)" 180 '^200$' \
     || die "Grafana did not start. Check '$DEVOPS_CMD logs grafana'."
   log_ok "Prometheus and Grafana run"
-  [[ -n $(app_address staging docker) ]] \
+  [[ -n $(app_address "${ENVIRONMENTS%% *}" docker) ]] \
     || log_warn "Prometheus cannot reach the application in this cluster; scrape it with a Prometheus there."
 }
 

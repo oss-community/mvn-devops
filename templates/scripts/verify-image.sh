@@ -1,7 +1,7 @@
 #!/bin/sh
 # Pipeline step of the security/cosign module: checks that the image of the
 # current commit carries a signature of the project's Cosign key before it
-# goes to production.
+# goes to an environment that needs approval.
 set -eu
 scripts=$(dirname "$0")
 cosign=$(sh "$scripts/tool.sh" cosign)

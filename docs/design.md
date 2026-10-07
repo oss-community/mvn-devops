@@ -47,8 +47,9 @@ other.
 
 ## Stages come from the modules
 
-Every module declares its stages with an order number and a phase (`ci` or
-`cd`). For example sonarqube says "stage 45 in phase ci:
+Every module declares its stages with an order number and a phase (`ci`,
+`cd`, or a deployment environment such as `staging`). For example sonarqube
+says "stage 45 in phase ci:
 `sonar-maven-plugin:sonar`". The orchestrator takes the sorted list and turns
 it into its own format:
 
@@ -56,7 +57,8 @@ it into its own format:
 - **jenkins** writes a Jenkinsfile and a `casc.yaml` that defines the admin
   user, the credentials and the job. No setup wizard and nothing to click.
 - **concourse** writes a `pipeline.yml` with a `ci` job that runs on every
-  push and a `cd` job you start by hand after `ci` passed.
+  push, a `cd` job you start by hand after `ci` passed, and a job per
+  environment that needs approval.
 
 So a new tool shows up in all three orchestrators at once.
 

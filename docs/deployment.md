@@ -9,6 +9,42 @@ with a health endpoint (`/actuator/health`) that the end-to-end tests deploy;
 [hello-data](../examples/hello-data) adds a PostgreSQL database with Flyway
 migrations.
 
+## Environments
+
+The image is built once and the same image goes through the deployment
+environments one after the other. `ENVIRONMENTS` in `devops.conf` lists them
+in that order; a project that does not set it has `staging production`. The
+names commonly used for four environments are:
+
+```properties
+ENVIRONMENTS=dev test staging prod
+```
+
+An environment either follows the one before it on its own, or waits until
+someone approves it (`ENV_<NAME>_APPROVAL=yes`; by default only the last one
+waits). `secrets` asks for each. The environments after an approved one
+follow it up to the next one that needs approval, so the pipeline falls into
+parts:
+
+| `ENVIRONMENTS` | Approval | What runs |
+|---|---|---|
+| `staging production` | production | `run`: ci, cd, staging. `run --phase production`: production |
+| `dev test staging prod` | prod | `run`: ci, cd, dev, test, staging. `run --phase prod`: prod |
+| `dev test staging prod` | staging, prod | `run`: ci, cd, dev, test. `run --phase staging`: staging. `run --phase prod`: prod |
+
+`prod` also stands for the last environment, whatever it is called, in
+`run --phase prod` and `rollback prod`. `devops.sh stages` shows each
+environment's stages and where an approval comes. How each orchestrator asks
+for approval is in [orchestrators.md](orchestrators.md#approvals).
+
+Everything that belongs to an environment is per environment: its machine or
+namespace, its port, its secrets in Vault, its database and password, its
+metrics and logs. Values follow the pattern `<PREFIX>_<NAME>_<SETTING>`, for
+example `DEPLOY_DEV_PORT` or `DATABASE_PROD_PASSWORD`. Default ports count up
+from the last environment: with `dev test staging prod` the simulated machine
+serves prod on 8180, staging on 8181, test on 8182 and dev on 8183 (k3s: 8280
+and up). Names are lowercase letters and digits, starting with a letter.
+
 ## Container image
 
 Choose one module of the *Container image* category:
@@ -70,7 +106,7 @@ stage and the deployment:
 | `syft` | `sbom` (76, cd) | writes the software bill of materials of the image to `target/sbom.spdx.json` (SPDX) and `target/sbom.cdx.json` (CycloneDX) |
 | `trivy` | `scan-image` (77, cd) | scans the operating system packages and the jars in the image, writes `target/trivy-report.json` and prints the findings of `TRIVY_SEVERITY` (HIGH,CRITICAL). Fails when there are vulnerabilities of `TRIVY_FAIL_ON` (CRITICAL) that have a fix; empty means report only |
 | `cosign` | `sign-image` (78, cd) | signs the image by digest with the project's key and, with `syft`, attaches the SBOM as a signed attestation |
-| `cosign` | `verify-image` (89, prod) | with a deployment module: production only gets an image signed with that key |
+| `cosign` | `verify-image-<environment>` (79) | with a deployment module, in each environment that needs approval: it only gets an image signed with that key |
 
 The tools are not installed by hand: `templates/scripts/tool.sh` downloads the
 pinned release where the pipeline runs (your machine, the Jenkins container or
@@ -97,8 +133,7 @@ Compose on a machine it reaches over SSH:
 
 | Stage | Phase | What happens |
 |---|---|---|
-| `deploy-staging` (80) | cd | deploys the image of the commit to staging |
-| `deploy-production` (90) | prod | the same image to production, after the approval ([orchestrators.md](orchestrators.md#production-approval)) |
+| `deploy-<environment>` (80) | the environment | deploys the image of the commit to the environment's machine, after its approval when it needs one |
 
 Each deployment:
 
@@ -109,7 +144,7 @@ Each deployment:
 3. when it does not answer, puts back the image that ran before and fails the
    stage.
 
-The container gets `DEPLOY_ENVIRONMENT` (`staging` or `production`), the
+The container gets `DEPLOY_ENVIRONMENT` (the environment's name), the
 environment's secrets from Vault (see [Secrets](#secrets)), written to
 `secrets.yml` in that directory, and the settings in `app.env` there, which
 you keep on the machine; it is never overwritten.
@@ -118,10 +153,10 @@ you keep on the machine; it is never overwritten.
 
 | Question | Default | Meaning |
 |---|---|---|
-| `DEPLOY_SERVER_URL` | empty | staging machine, e.g. `ssh://deploy@staging.example.com:22`; empty: a simulated machine in Docker |
-| `DEPLOY_PRODUCTION_SERVER_URL` | the staging machine | production machine |
+| `DEPLOY_SERVER_URL` | empty | machine of the first environment, e.g. `ssh://deploy@staging.example.com:22`; empty: a simulated machine in Docker for all of them |
+| `DEPLOY_<NAME>_SERVER_URL` | the first machine | machine of each other environment, e.g. `DEPLOY_PRODUCTION_SERVER_URL` |
 | `DEPLOY_SSH_KEY_FILE` | empty | private key that may log in; empty: `setup` generates `.devops/keys/deploy` |
-| `DEPLOY_STAGING_PORT`, `DEPLOY_PRODUCTION_PORT` | 8181, 8180 | port of the application on the machine |
+| `DEPLOY_<NAME>_PORT` | 8180 for the last, counting up | port of the application on the machine, e.g. `DEPLOY_STAGING_PORT` 8181 |
 | `DEPLOY_HEALTH_PATH` | `/actuator/health` | health check |
 
 A real machine needs Docker with the compose plugin, curl or wget, and a user
@@ -143,9 +178,9 @@ curl http://localhost:8180/hello     # production
 ### Rollback
 
 ```bash
-devops.sh rollback                     # production: the image that ran before
+devops.sh rollback                     # the last environment: the image that ran before
 devops.sh rollback staging
-devops.sh rollback production --to 3f2a9c1d4e5b
+devops.sh rollback prod --to 3f2a9c1d4e5b
 ```
 
 Rolling back twice returns to where you started. Every image stays in the
@@ -161,8 +196,7 @@ Helm, one release per environment:
 
 | Stage | Phase | What happens |
 |---|---|---|
-| `deploy-staging` (80) | cd | `helm upgrade --install` in the namespace `<app>-staging` |
-| `deploy-production` (90) | prod | the same in `<app>-production`, after the approval |
+| `deploy-<environment>` (80) | the environment | `helm upgrade --install` in the namespace `<app>-<environment>`, after its approval when it needs one |
 
 Helm waits until the new pods pass their readiness probe (the health path).
 The update is rolling: a new pod must be ready before an old one stops, so the
@@ -173,8 +207,8 @@ application stays up. When the new version does not become ready within
 |---|---|---|
 | `KUBERNETES_SERVER_URL` | empty | an existing cluster; empty: k3s in Docker |
 | `KUBERNETES_KUBECONFIG` | `~/.kube/config` | kubeconfig of the existing cluster, passed to the pipeline as a secret |
-| `KUBERNETES_STAGING_PORT`, `KUBERNETES_PRODUCTION_PORT` | 8281, 8280 | k3s: the application on this machine |
-| `KUBERNETES_STAGING_NODE_PORT`, `KUBERNETES_PRODUCTION_NODE_PORT` | 30081, 30080 with k3s | node port of the service; empty: a ClusterIP service for your ingress |
+| `KUBERNETES_<NAME>_PORT` | 8280 for the last, counting up | k3s: the application on this machine, e.g. `KUBERNETES_STAGING_PORT` 8281 |
+| `KUBERNETES_<NAME>_NODE_PORT` | 30080 for the last, counting up, with k3s | node port of the service; empty: a ClusterIP service for your ingress |
 | `KUBERNETES_CHART` | empty | the project's own chart, e.g. `deploy/chart`; empty: the generic chart |
 | `KUBERNETES_REPLICAS` | 2 | pods per environment |
 | `DEPLOY_HEALTH_PATH` | `/actuator/health` | readiness and liveness probe |
@@ -217,8 +251,7 @@ to git, and Argo CD, running in the cluster, makes the cluster match it:
 
 | Stage | Phase | What happens |
 |---|---|---|
-| `deploy-staging` (80) | cd | commits `environments/staging/` to the GitOps branch and waits until Argo CD reports the application synced and healthy |
-| `deploy-production` (90) | prod | the same for `environments/production/`, after the approval |
+| `deploy-<environment>` (80) | the environment | commits `environments/<environment>/` to the GitOps branch and waits until Argo CD reports the application synced and healthy |
 
 Each environment directory holds the chart and `environment.yaml` with the
 image tag and the environment's values, so the branch's history is the
@@ -230,13 +263,13 @@ fails. `devops.sh rollback` is such a commit too.
 | Question | Default | Meaning |
 |---|---|---|
 | `GITOPS_BRANCH` | `gitops` | branch of the project's repository with the desired state; created by the first release |
-| `GITOPS_CANARY` | `yes` | production as a canary with Argo Rollouts |
+| `GITOPS_CANARY` | `yes` | the last environment as a canary with Argo Rollouts |
 | `ARGOCD_HOST_PORT` | 8443 | k3s: Argo CD's web console on this machine (`admin`, `devops.sh get ARGOCD_ADMIN_PASSWORD`) |
 
 `configure` installs Argo CD and Argo Rollouts from their release manifests,
-adds the repository with the GitHub token, and creates the Applications
-`<app>-staging` and `<app>-production`, which sync automatically, prune what
-was removed from git and undo changes made by hand.
+adds the repository with the GitHub token, and creates one Application
+`<app>-<environment>` per environment, which syncs automatically, prunes what
+was removed from git and undoes changes made by hand.
 
 **The canary** replaces the Deployment with an Argo Rollouts `Rollout`: the
 new version first gets a quarter, then half of the pods, with a pause after
@@ -348,8 +381,8 @@ too (`ALTER USER`).
 
 ## Monitoring
 
-The *Monitoring* modules watch the deployed application in staging and
-production. They run in Docker next to the other tools.
+The *Monitoring* modules watch the deployed application in each environment.
+They run in Docker next to the other tools.
 
 **Prometheus and Grafana** (`prometheus`): Prometheus scrapes the
 application's metrics in each environment every 15 seconds, labelled
@@ -402,24 +435,25 @@ changing the deployment.
 
 ## Load test
 
-The `k6` module (*Load test* category) load tests staging with
-[k6](https://k6.io) after each deployment there, before anyone approves
-production:
+The `k6` module (*Load test* category) load tests one environment
+(`LOAD_TEST_ENVIRONMENT`, by default the one before the last, e.g. staging)
+with [k6](https://k6.io) right after each deployment there:
 
 | Stage | Phase | What happens |
 |---|---|---|
-| `load-test` (85) | cd | `LOAD_TEST_VUS` virtual users call staging for `LOAD_TEST_DURATION`; the stage fails when a threshold fails |
+| `load-test` (85) | that environment | `LOAD_TEST_VUS` virtual users call it for `LOAD_TEST_DURATION`; the stage fails when a threshold fails |
 
 Without a script of its own, the project gets
 [load-test.js](../templates/scripts/load-test.js): each virtual user calls
 every path of `LOAD_TEST_PATHS` and pauses a second. It fails when more than
 `LOAD_TEST_MAX_ERROR_RATE` of the requests fail or the 95th percentile of the
 response times is above `LOAD_TEST_P95_MS`. A failed load test stops the
-release there: production keeps the version it has.
+release there: the environments after it keep the version they have.
 
 | Question | Default | Meaning |
 |---|---|---|
-| `LOAD_TEST_URL` | found from the deployment | staging as the pipeline reaches it; asked for a cluster of its own |
+| `LOAD_TEST_ENVIRONMENT` | the one before the last | environment the load test calls |
+| `LOAD_TEST_URL` | found from the deployment | that environment as the pipeline reaches it; asked for a cluster of its own |
 | `LOAD_TEST_SCRIPT` | empty | the project's k6 script, e.g. `src/test/k6/load.js`; it gets `BASE_URL` and the values below as `__ENV` |
 | `LOAD_TEST_PATHS` | `/actuator/health` | paths the generic script calls, comma separated, e.g. `/hello,/actuator/health` |
 | `LOAD_TEST_VUS` | 10 | virtual users |

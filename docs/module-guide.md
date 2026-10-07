@@ -64,8 +64,13 @@ random_password                       # a random default password
 pipeline_var KEY VALUE                # hand a variable to the pipeline
 pipeline_secret KEY VALUE             # same, masked
 
-stage ORDER PHASE NAME "MAVEN ARGS"   # PHASE is ci, cd or prod (after approval); args may use $VARS
+stage ORDER PHASE NAME "MAVEN ARGS"   # PHASE is ci, cd or an environment ("prod": the last); args may use $VARS
 shell_stage ORDER PHASE NAME "CMD"    # a POSIX shell command in the project root instead of mvn
+$ENVIRONMENTS                         # the deployment environments, in order, e.g. "staging production"
+upper NAME                            # STAGING: per-environment values are <PREFIX>_<NAME>_<SETTING>
+env_offset ENV                        # 0 for the last environment, 1 for the one before, ... (default ports)
+env_gates                             # the environments that wait for approval
+rollback_args "$@"                    # parse [environment] [--to TAG] into ROLLBACK_ENV, ROLLBACK_TAG
 mvn_plugin KEY group:artifact VERSION GOAL   # full plugin coordinates, version overridable per project
 mvn_deploy_args SNAP_ID SNAP_URL REL_ID REL_URL   # package + attach + deploy without distributionManagement
 ask_server PREFIX "Title" [example]   # ask <PREFIX>_SERVER_URL; empty means Docker

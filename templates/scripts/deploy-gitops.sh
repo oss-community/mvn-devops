@@ -11,7 +11,7 @@
 # otherwise they are put in the cluster directly, as the Secret <app>-env in
 # the namespace <app>-<environment>.
 #
-#   deploy-gitops.sh <staging|production> [deploy [TAG] | rollback [TAG]]
+#   deploy-gitops.sh <environment> [deploy [TAG] | rollback [TAG]]
 #
 # deploy uses the image of the current commit by default; rollback without a
 # tag goes back to the release before the current one.
@@ -20,13 +20,17 @@ set -eu
 environment=$1
 action=${2:-deploy}
 tag=${3:-}
-case $environment in
-  staging) node_port=${KUBERNETES_STAGING_NODE_PORT:-} canary=false ;;
-  production)
-    node_port=${KUBERNETES_PRODUCTION_NODE_PORT:-} canary=false
-    [ "${GITOPS_CANARY:-no}" = yes ] && canary=true ;;
+case " ${ENVIRONMENTS:-staging production} " in
+  *" $environment "*) ;;
   *) echo "deploy-gitops.sh: unknown environment '$environment'" >&2; exit 2 ;;
 esac
+key=$(printf '%s' "$environment" | tr '[:lower:]' '[:upper:]')
+node_port=''
+eval "node_port=\${KUBERNETES_${key}_NODE_PORT:-}"
+# The last environment is released as a canary with GITOPS_CANARY=yes.
+canary=false
+last=${ENVIRONMENTS:-staging production}
+[ "${GITOPS_CANARY:-no}" = yes ] && [ "$environment" = "${last##* }" ] && canary=true
 case $action in
   deploy) [ -n "$tag" ] || tag=$(git rev-parse --short=12 HEAD) ;;
   rollback) ;;

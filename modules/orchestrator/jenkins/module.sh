@@ -7,8 +7,9 @@
 # publish recreates the Jenkins container so it reloads env and casc.yaml.
 #         With an existing server (JENKINS_SERVER_URL) it creates or updates
 #         the credentials and the job through the REST API instead.
-# run     triggers the job and streams its console.  With production stages
-#         the build stops at an approval step; "run --phase prod" approves it.
+# run     triggers the job and streams its console.  Before each environment
+#         that needs approval the build stops at an approval step;
+#         "run --phase <environment>" approves it.
 
 job_name() { printf '%s' "$PROJECT_NAME"; }
 
@@ -75,8 +76,11 @@ module_destroy() {
   fi
 }
 
-# The build log shows this line while it waits for the approval.
-APPROVAL_MESSAGE='Deploy to production?'
+# The build log shows "Deploy to <environment>?" while it waits for the
+# approval of an environment; the input's id is the environment's name with
+# a capital first letter (the form Jenkins uses in the input's URL).
+approval_message() { printf 'Deploy to %s?' "$1"; }
+approval_id() { printf '%s' "${1^}"; }
 
 groovy_escape() { local v=${1//\\/\\\\}; printf '%s' "${v//\'/\\\'}"; }
 xml_escape() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
@@ -107,12 +111,14 @@ render_jenkinsfile() {
   printf "    stage('checkout') {\n      steps {\n"
   printf "        git url: env.GITHUB_URL + '/' + env.GITHUB_REPOSITORY + '.git', branch: env.GIT_BRANCH, credentialsId: '%s'\n" "$(credential_id github-https)"
   printf "        sh '%s'\n      }\n    }\n" "$(pipeline_ci_setup)"
-  local phase approval=0
+  local phase group approved=' '
   while IFS='|' read -r _ phase name args; do
-    if [[ $phase == prod ]] && (( ! approval )); then
-      approval=1
-      printf "    stage('approve-production') {\n      steps {\n        timeout(time: 7, unit: 'DAYS') {\n"
-      printf "          input id: 'Production', message: '%s', ok: 'Deploy'\n        }\n      }\n    }\n" "$APPROVAL_MESSAGE"
+    group=$(phase_group "$phase")
+    if [[ $group != ci && $group != cd && $approved != *" $group "* ]]; then
+      approved+="$group "
+      printf "    stage('approve-%s') {\n      steps {\n        timeout(time: 7, unit: 'DAYS') {\n" "$group"
+      printf "          input id: '%s', message: '%s', ok: 'Deploy'\n        }\n      }\n    }\n" \
+        "$(approval_id "$group")" "$(approval_message "$group")"
     fi
     printf "    stage('%s') {\n      steps {\n        sh '%s'\n      }\n    }\n" "$name" "$(stage_command "$flags" "$args")"
   done < <(pipeline_stages)
@@ -297,7 +303,8 @@ module_publish() {
 }
 
 # stream_build <number> <start>: prints the console from <start> until the
-# build ends (returns 0) or waits for the production approval (returns 2).
+# build ends (returns 0) or waits for an approval (returns 2, with the
+# environment in WAITING_FOR).
 stream_build() {
   local number=$1 start=$2 headers chunk size more
   headers=$(mktemp)
@@ -308,7 +315,8 @@ stream_build() {
     more=$(awk 'tolower($1) == "x-more-data:" { print $2 }' "$headers" | tr -d '\r')
     start=${size:-$start}
     [[ $more == true ]] || break
-    if [[ $chunk == *"$APPROVAL_MESSAGE"* ]]; then
+    if [[ $chunk =~ Deploy\ to\ ([a-z][a-z0-9]*)\? ]]; then
+      WAITING_FOR=${BASH_REMATCH[1]}
       rm -f "$headers"
       return 2
     fi
@@ -325,32 +333,41 @@ finish_build() {
   log_ok "Build #$1 succeeded"
 }
 
-# approve_production: lets the build that waits for approval continue.
-approve_production() {
-  local number status headers size
+# approve <environment>: lets the build that waits for its approval continue.
+approve() {
+  local env=$1 number status headers size result=0
   number=$(jenkins_api GET "/job/$(job_name)/lastBuild/api/json" | jq -r 'select(.building) | .number')
-  [[ -n $number ]] || die "No build of $(job_name) is waiting for the production approval. Run '$DEVOPS_CMD run' first."
+  [[ -n $number ]] || die "No build of $(job_name) is waiting for the approval of $env. Run '$DEVOPS_CMD run' first."
   headers=$(mktemp)
   jenkins_api GET "/job/$(job_name)/$number/logText/progressiveText?start=0" -D "$headers" -o /dev/null
   size=$(awk 'tolower($1) == "x-text-size:" { print $2 }' "$headers" | tr -d '\r')
   rm -f "$headers"
-  status=$(jenkins_api POST "/job/$(job_name)/$number/input/Production/proceedEmpty" -o /dev/null -w '%{http_code}')
-  [[ $status == 200 || $status == 302 ]] || die "Build #$number does not wait for the production approval (HTTP $status)."
-  log_ok "Approved production for build #$number"
-  stream_build "$number" "${size:-0}" || die "Build #$number waits for another approval"
+  status=$(jenkins_api POST "/job/$(job_name)/$number/input/$(approval_id "$env")/proceedEmpty" -o /dev/null -w '%{http_code}')
+  [[ $status == 200 || $status == 302 ]] || die "Build #$number does not wait for the approval of $env (HTTP $status)."
+  log_ok "Approved $env for build #$number"
+  stream_build "$number" "${size:-0}" || result=$?
+  if (( result == 2 )); then
+    waiting "$number"
+    return 0
+  fi
   finish_build "$number"
 }
 
+waiting() {
+  log_ok "Build #$1 waits for the approval of $WAITING_FOR"
+  log_info "Approve it with '$DEVOPS_CMD run --phase $WAITING_FOR' or at $(jenkins_url)/job/$(job_name)/$1/input/"
+}
+
 module_run() {
-  local headers location number='' status=0
+  local headers location number='' status=0 env
   while (( $# )); do
     case $1 in
       --phase)
-        case $2 in
-          prod) approve_production; return ;;
-          *) die "run: Jenkins runs ci and cd in one build; --phase only takes prod (the approval)" ;;
-        esac ;;
-      *) die "run: unknown option $1 (use --phase prod)" ;;
+        env=$(env_resolve "$2") \
+          || die "run: Jenkins runs ci and cd in one build; --phase takes an environment that needs approval ($(pipeline_gates | xargs))"
+        approve "$env"
+        return ;;
+      *) die "run: unknown option $1 (use --phase <environment>)" ;;
     esac
   done
   headers=$(mktemp)
@@ -368,8 +385,7 @@ module_run() {
 
   stream_build "$number" 0 || status=$?
   if (( status == 2 )); then
-    log_ok "Build #$number passed staging and waits for the production approval"
-    log_info "Approve it with '$DEVOPS_CMD run --phase prod' or at $(jenkins_url)/job/$(job_name)/$number/input/"
+    waiting "$number"
     return 0
   fi
   finish_build "$number"

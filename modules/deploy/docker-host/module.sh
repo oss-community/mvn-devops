@@ -1,28 +1,34 @@
 # shellcheck shell=bash
-# Deploys the image of the commit with Docker Compose over SSH: the cd phase
-# to staging, the prod phase to production once someone approves it.  Each
-# deployment is checked at its health endpoint; when the check fails the
-# previous image is put back.  "devops.sh rollback" puts it back by hand.
+# Deploys the image of the commit with Docker Compose over SSH to each
+# environment in turn (lib/environments.sh); an environment that needs
+# approval waits for it.  Each deployment is checked at its health endpoint;
+# when the check fails the previous image is put back.  "devops.sh rollback"
+# puts it back by hand.
 #
-# The machines are given as DEPLOY_SERVER_URL (staging) and
-# DEPLOY_PRODUCTION_SERVER_URL, e.g. ssh://deploy@app.example.com:22.  They
-# need Docker with the compose plugin and curl or wget.  Without a URL both
-# environments go to a simulated machine in Docker (compose.yml), on the
-# ports DEPLOY_STAGING_PORT and DEPLOY_PRODUCTION_PORT of this machine.
-
-ENVIRONMENTS='staging production'
+# The machines are given as ssh:// URLs, e.g. ssh://deploy@app.example.com:22:
+# DEPLOY_SERVER_URL for the first environment and DEPLOY_<NAME>_SERVER_URL
+# for each other one (the same machine by default).  They need Docker with
+# the compose plugin and curl or wget.  Without a URL every environment goes
+# to a simulated machine in Docker (compose.yml), on the port
+# DEPLOY_<NAME>_PORT of this machine.
 
 module_secrets() {
+  local env first
   require_image_module
-  ask_server DEPLOY "Staging machine" ssh://deploy@staging.example.com
+  first=${ENVIRONMENTS%% *}
+  ask_server DEPLOY "Machine of $first" "ssh://deploy@$first.example.com"
   if server_external DEPLOY; then
-    ask DEPLOY_PRODUCTION_SERVER_URL "Production machine: URL such as ssh://deploy@app.example.com" "$(value DEPLOY_SERVER_URL)"
+    for env in $ENVIRONMENTS; do
+      [[ $env == "$first" ]] && continue
+      ask "DEPLOY_$(upper "$env")_SERVER_URL" "Machine of $env: URL such as ssh://deploy@app.example.com" "$(value DEPLOY_SERVER_URL)"
+    done
     ask_local DEPLOY_SSH_KEY_FILE "Private SSH key that may log in to the machines (empty: generate one)" ""
   else
     ask DEPLOY_SSH_HOST_PORT "SSH port of the simulated machine on the Docker machine" 2222
   fi
-  ask DEPLOY_STAGING_PORT "Port of the application on the staging machine" 8181
-  ask DEPLOY_PRODUCTION_PORT "Port of the application on the production machine" 8180
+  for env in $ENVIRONMENTS; do
+    ask "DEPLOY_$(upper "$env")_PORT" "Port of the application on the machine of $env" $((8180 + $(env_offset "$env")))
+  done
   ask DEPLOY_HEALTH_PATH "Health check path of the application" /actuator/health
 }
 
@@ -51,13 +57,7 @@ module_prepare() {
 }
 
 # server_of <environment>: ssh:// URL of the machine, empty for the simulated one.
-server_of() {
-  if [[ $1 == production ]]; then
-    value DEPLOY_PRODUCTION_SERVER_URL "$(value DEPLOY_SERVER_URL)"
-  else
-    value DEPLOY_SERVER_URL
-  fi
-}
+server_of() { deploy_server_of "$1"; }
 
 # ssh_target <environment> <host|pipeline>: "user@host port" as this machine
 # or the pipeline reaches the machine.
@@ -82,8 +82,6 @@ app_url() {
   host=${target%% *}; host=${host#*@}
   printf 'http://%s:%s' "$host" "$(value "DEPLOY_$(upper "$1")_PORT")"
 }
-
-upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
 
 # deploy_ssh <environment> <known hosts file> <port> <user@host> <command>
 deploy_ssh() {
@@ -151,20 +149,17 @@ module_env() {
 }
 
 module_stages() {
-  shell_stage 80 cd deploy-staging "sh \"\$DEVOPS_SCRIPTS/deploy-compose.sh\" staging"
-  shell_stage 90 prod deploy-production "sh \"\$DEVOPS_SCRIPTS/deploy-compose.sh\" production"
+  local env
+  for env in $ENVIRONMENTS; do
+    shell_stage 80 "$env" "deploy-$env" "sh \"\$DEVOPS_SCRIPTS/deploy-compose.sh\" $env"
+  done
 }
 
-# rollback [staging|production] [--to TAG]
+# rollback [environment] [--to TAG]
 module_rollback() {
-  local env=production tag='' target
-  while (( $# )); do
-    case $1 in
-      staging|production) env=$1; shift ;;
-      --to) tag=${2:?--to needs a tag}; shift 2 ;;
-      *) die "rollback: unknown option $1 (use [staging|production] [--to TAG])" ;;
-    esac
-  done
+  local env tag target
+  rollback_args "$@"
+  env=$ROLLBACK_ENV tag=$ROLLBACK_TAG
   target=$(ssh_target "$env" host)
   log_step "Rollback of $env${tag:+ to $tag}"
   (

@@ -13,7 +13,7 @@ on:
 
 jobs:
   e2e:
-    name: ${{ matrix.orchestrator }} (${{ matrix.with }})
+    name: ${{ matrix.orchestrator }} (${{ matrix.with }})${{ matrix.environments && format(' [{0}]', matrix.environments) || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -71,6 +71,29 @@ jobs:
             with: docker-registry,kubernetes,k6
           - orchestrator: concourse
             with: docker-registry,docker-host,k6
+          # Environments of the project's own, with one or two approvals.
+          - orchestrator: maven
+            with: docker-registry,docker-host,postgresql
+            environments: dev test staging prod
+            approvals: staging prod
+          - orchestrator: jenkins
+            with: docker-registry,kubernetes,k6,prometheus
+            environments: dev test staging prod
+            approvals: staging prod
+          - orchestrator: concourse
+            with: docker-registry,docker-host,cosign
+            environments: dev test staging prod
+            approvals: staging prod
+          - orchestrator: maven
+            with: docker-registry,argocd
+            environments: dev test staging prod
+          # Ready-made pipelines (pipelines/).
+          - orchestrator: pipeline
+            with: maven-docker-host
+          - orchestrator: pipeline
+            with: jenkins-kubernetes
+          - orchestrator: pipeline
+            with: concourse-sonarqube-nexus
     steps:
       - uses: actions/checkout@v4
       - name: free disk space
@@ -82,3 +105,6 @@ jobs:
           java-version: '21'
       - name: tests/e2e.sh ${{ matrix.orchestrator }} ${{ matrix.with }}
         run: tests/e2e.sh ${{ matrix.orchestrator }} ${{ matrix.with }}
+        env:
+          E2E_ENVIRONMENTS: ${{ matrix.environments }}
+          E2E_APPROVALS: ${{ matrix.approvals }}

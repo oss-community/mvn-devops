@@ -4,7 +4,7 @@
 # release back when they are not.  Stage script of the deploy/kubernetes
 # module; "devops.sh rollback" runs it too.
 #
-#   deploy-helm.sh <staging|production> [deploy [TAG] | rollback [TAG]]
+#   deploy-helm.sh <environment> [deploy [TAG] | rollback [TAG]]
 #
 # deploy uses the image of the current commit by default; rollback without a
 # tag goes back to the previous Helm revision.  The release is $DEPLOY_NAME in
@@ -15,11 +15,13 @@ set -eu
 environment=$1
 action=${2:-deploy}
 tag=${3:-}
-case $environment in
-  staging) node_port=${KUBERNETES_STAGING_NODE_PORT:-} ;;
-  production) node_port=${KUBERNETES_PRODUCTION_NODE_PORT:-} ;;
+case " ${ENVIRONMENTS:-staging production} " in
+  *" $environment "*) ;;
   *) echo "deploy-helm.sh: unknown environment '$environment'" >&2; exit 2 ;;
 esac
+key=$(printf '%s' "$environment" | tr '[:lower:]' '[:upper:]')
+node_port=''
+eval "node_port=\${KUBERNETES_${key}_NODE_PORT:-}"
 scripts=$(dirname "$0")
 helm=$(sh "$scripts/tool.sh" helm)
 release=$DEPLOY_NAME

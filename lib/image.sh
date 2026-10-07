@@ -80,25 +80,38 @@ image_stages() {
   stage 75 cd image "$args"
 }
 
+# deploy_server_of <environment>: ssh:// URL of the machine of an
+# environment with the deploy/docker-host module, empty for the simulated
+# one: DEPLOY_SERVER_URL for the first environment, DEPLOY_<NAME>_SERVER_URL
+# (the same machine by default) for the others.
+deploy_server_of() {
+  local first
+  first=$(environments)
+  first=${first%% *}
+  if [[ $1 == "$first" ]]; then
+    value DEPLOY_SERVER_URL
+  else
+    value "DEPLOY_$(upper "$1")_SERVER_URL" "$(value DEPLOY_SERVER_URL)"
+  fi
+}
+
 # app_address <environment> <host|docker>: host:port of the deployed
 # application in an environment, as this machine (host) or a container next
 # to the tools (docker) reaches it; empty when it is out of reach (a cluster
 # of its own).
 app_address() {
-  local env=$1 upper url local_host
-  upper=$(printf '%s' "$env" | tr '[:lower:]' '[:upper:]')
+  local env=$1 url local_host
   local_host=$(devops_host)
   [[ $2 == docker ]] && local_host=host.docker.internal
   if [[ " $MODULES " == *" deploy/docker-host "* ]]; then
     if server_external DEPLOY; then
-      url=$(value DEPLOY_SERVER_URL)
-      [[ $env == production ]] && url=$(value DEPLOY_PRODUCTION_SERVER_URL "$url")
+      url=$(deploy_server_of "$env")
       url=${url#ssh://}; url=${url%%/*}; url=${url#*@}
-      printf '%s:%s' "${url%:*}" "$(value "DEPLOY_${upper}_PORT")"
+      printf '%s:%s' "${url%:*}" "$(value "DEPLOY_$(upper "$env")_PORT")"
     else
-      printf '%s:%s' "$local_host" "$(value "DEPLOY_${upper}_PORT")"
+      printf '%s:%s' "$local_host" "$(value "DEPLOY_$(upper "$env")_PORT")"
     fi
   elif [[ " $MODULES " == *" deploy/kubernetes "* ]] && ! server_external KUBERNETES; then
-    printf '%s:%s' "$local_host" "$(value "KUBERNETES_${upper}_PORT")"
+    printf '%s:%s' "$local_host" "$(value "KUBERNETES_$(upper "$env")_PORT")"
   fi
 }

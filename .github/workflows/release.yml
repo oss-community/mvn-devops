@@ -1,6 +1,6 @@
 name: release
 
-# Push a tag such as v0.1.0, or run the workflow by hand with a version, to
+# Push a tag such as v1.1.0, or run the workflow by hand with a version, to
 # build the packages and publish a GitHub release.
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release, e.g. 0.1.0 (the tag v<version> is created)'
+        description: 'Version to release, e.g. 1.1.0 (the tag v<version> is created)'
         required: true
 
 permissions:
@@ -31,6 +31,8 @@ jobs:
           if sha=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}"); then
             [ "$sha" = "$GITHUB_SHA" ] || { echo "::error::Tag $TAG already exists on $sha. Delete it first."; exit 1; }
           fi
+      - name: release notes from CHANGELOG.md
+        run: packaging/release-notes.sh "$TAG" > "$RUNNER_TEMP/notes.md"
       - name: shellcheck
         run: shellcheck devops.sh lib/*.sh modules/*/*/module.sh tests/*.sh packaging/*.sh
       - name: smoke test
@@ -49,4 +51,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "mvn-devops $TAG" --generate-notes
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "mvn-devops $TAG" --notes-file "$RUNNER_TEMP/notes.md"

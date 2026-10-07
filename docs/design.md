@@ -75,14 +75,43 @@ with `-gs` (global settings). A project adds no profile,
 profiles or settings file can still use them through `MAVEN_PROFILES` and
 `MAVEN_SETTINGS`.
 
-## Project state
+## How it fits together
 
-Everything about one project lives in two places:
+```
+devops.sh ── lib/  (menu, value store, env files, stages, compose)
+   │
+   └── modules/<category>/<tool>/
+         module.conf    title, description, requirements
+         module.sh      hooks: module_secrets, module_prepare, module_configure,
+                        module_env, module_stages, module_urls
+                        (+ module_render, module_publish, module_run for orchestrators)
+         compose.yml    containers of the tool (optional)
+```
 
-- `devops.conf` in the project root, committed: the selected tools and every
-  answer that is not a secret, so the whole team gets the same setup.
-- `.devops/` in the project root, ignored by git: passwords and tokens, the
-  generated env files and pipeline definitions, and SSH keys.
+The selected tools and every answer that is not a secret or personal are kept
+in `<project>/devops.conf`, which you commit. Everything else is kept in
+`<project>/.devops/` (it git-ignores itself):
+
+```
+.devops/
+  values/<KEY>          one file per value, chmod 600
+  env/pipeline.env      variables handed to the pipeline (compose env_file format)
+  env/pipeline.sh       the same as bash exports
+  env/compose.env       everything, for ${VAR} substitution in compose files
+  generated/            Jenkinsfile, jenkins/casc.yaml, concourse/*.yml, pipeline.sh
+  keys/                 generated SSH deploy key
+```
+
+Nothing is written to `~/.bashrc` or to system environment variables, and
+secrets are never printed: `env --show` masks them and the orchestrators bind
+them as masked credentials.
+
+URLs handed to the pipeline depend on where it runs. A tool on an existing
+server is always reached at its own URL. A tool in Docker is reached at
+`DEVOPS_HOST:<port>` by the `maven` orchestrator and by an existing Jenkins or
+Concourse server, and at its compose service name (`http://sonarqube:9000`) by
+Jenkins or Concourse in Docker, which share its network. See
+[Where the tools run](where-tools-run.md).
 
 ## Where the tools run
 
@@ -95,7 +124,8 @@ has two modes:
   `<TOOL>_SERVER_URL` and credentials, no container is created, and
   `configure` only checks the credentials and repositories.
 
-Each tool is decided on its own, so any mix works.
+Each tool is decided on its own, so any mix works. Details in
+[where-tools-run.md](where-tools-run.md).
 
 ## Life cycle
 

@@ -70,7 +70,7 @@ key when the `maven` orchestrator runs on your machine, and a deploy key
 Concourse runs the build.
 
 Create the `site` branch once and point GitHub Pages at it, as described in
-[Project site on GitHub Pages](../README.md#project-site-on-github-pages).
+[Project site on GitHub Pages](github-pages.md).
 
 ## Tokens
 

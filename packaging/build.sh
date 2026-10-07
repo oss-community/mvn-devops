@@ -19,7 +19,7 @@ name="mvn-devops-$VERSION"
 rm -rf "$DIST"
 STAGE="$DIST/stage/$name"
 mkdir -p "$STAGE"
-cp -R "$ROOT"/{.gitattributes,devops.sh,devops.bat,lib,modules,templates,docs,README.md,LICENSE} "$STAGE/"
+cp -R "$ROOT"/{.gitattributes,devops.sh,devops.bat,lib,modules,templates,docs,README.md,CHANGELOG.md,LICENSE} "$STAGE/"
 printf '%s\n' "$VERSION" > "$STAGE/VERSION"
 find "$STAGE" -name '*.sh' -exec chmod 755 {} +
 

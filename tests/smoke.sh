@@ -16,6 +16,8 @@ printf '<settings/>\n' > "$project/settings.xml"
 
 devops() { "$ROOT/devops.sh" -y -p "$project" "$@"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+# sed -i differs between GNU and BSD (macOS) sed.
+sed_i() { sed "$1" "$2" > "$2.tmp" && mv "$2.tmp" "$2"; }
 
 for orchestrator in maven jenkins concourse; do
   rm -rf "$project/.devops"
@@ -89,7 +91,7 @@ grep -qx 'ORCHESTRATOR=maven' "$conf" || fail "devops.conf: orchestrator missing
 grep -qx 'NEXUS_HOST_PORT=8084' "$conf" || fail "devops.conf: shared answer missing"
 ! grep -qE '^(DEVOPS_HOST|GITHUB_USERNAME|GITHUB_EMAIL)=' "$conf" || fail "devops.conf: personal value shared"
 ! grep -qE '^[A-Z_]*(PASSWORD|TOKEN)=' "$conf" || fail "devops.conf: secret shared"
-sed -i 's/^NEXUS_HOST_PORT=.*/NEXUS_HOST_PORT=9184/' "$conf"
+sed_i 's/^NEXUS_HOST_PORT=.*/NEXUS_HOST_PORT=9184/' "$conf"
 rm -rf "$project/.devops"   # a fresh clone: no local state, no init
 devops secrets > /dev/null
 [[ $(devops get NEXUS_HOST_PORT) == 9184 ]] || fail "devops.conf: answer not used on a fresh clone"
@@ -122,9 +124,12 @@ git -C "$crlf_dir/app" -c user.name=t -c user.email=t@t commit -qm init
 git -c core.autocrlf=true clone -q "$crlf_dir/app" "$crlf_dir/clone"
 ! grep -rlI $'\r' --exclude='*.bat' "$crlf_dir/clone/mvn-devops" > /dev/null || fail "line endings: CRLF after autocrlf checkout"
 grep -q $'\r$' "$crlf_dir/clone/mvn-devops/devops.bat" || fail "line endings: devops.bat should be CRLF"
-sed -i 's/$/\r/' "$crlf_dir/clone/mvn-devops/templates/settings.xml"
+perl -pi -e 's/\n/\r\n/' "$crlf_dir/clone/mvn-devops/templates/settings.xml"
 doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
 grep -q "CRLF" <<< "$doctor_out" || fail "line endings: doctor should report CRLF"
+eval "$(grep 'perl -pi' <<< "$doctor_out")"
+doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
+grep -q "line endings (LF)" <<< "$doctor_out" || fail "line endings: the fix doctor prints does not work"
 printf 'ok  line endings\n'
 
 # upgrade: a copy inside a project is replaced by a checked release.

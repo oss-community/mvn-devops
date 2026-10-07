@@ -33,5 +33,6 @@ for packager in deb rpm; do
 done
 
 rm -rf "$DIST/stage"
-( cd "$DIST" && sha256sum -- * > SHA256SUMS )
+if command -v sha256sum > /dev/null; then sum=(sha256sum); else sum=(shasum -a 256); fi
+( cd "$DIST" && "${sum[@]}" -- * > SHA256SUMS )
 ls -1 "$DIST"

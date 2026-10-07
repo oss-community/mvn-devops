@@ -14,3 +14,30 @@ jobs:
         run: shellcheck devops.sh lib/*.sh modules/*/*/module.sh tests/*.sh packaging/*.sh
       - name: smoke test
         run: tests/smoke.sh
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: the macOS Bash 3.2 gets a clear message
+        run: |
+          out=$(/bin/bash ./devops.sh --version 2>&1) && exit 1
+          echo "$out"
+          grep -q 'needs Bash 4' <<< "$out"
+      - name: Bash 4+ and jq from Homebrew
+        run: brew install bash jq
+      - name: smoke test
+        run: $(brew --prefix)/bin/bash tests/smoke.sh
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      # Windows runners check out with core.autocrlf=true, like most Windows
+      # machines; .gitattributes must keep the scripts LF.
+      - uses: actions/checkout@v4
+      - name: smoke test (Git Bash)
+        shell: bash
+        run: tests/smoke.sh
+      - name: devops.bat finds Git Bash
+        shell: cmd
+        run: devops.bat --version

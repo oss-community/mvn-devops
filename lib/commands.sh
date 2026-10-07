@@ -337,7 +337,7 @@ cmd_doctor() {
     log_warn "Files with Windows (CRLF) line endings, which Bash cannot run:"
     printf '    %s\n' "${crlf//$'\n'/$'\n'    }"
     log_warn "Fix them with:"
-    printf "    find '%s' -type f ! -name '*.bat' ! -name '*.cmd' ! -path '*/.git/*' -exec sed -i '%s' {} +\n" "$DEVOPS_HOME" 's/\r$//'
+    printf "    find '%s' -type f ! -name '*.bat' ! -name '*.cmd' ! -path '*/.git/*' -exec perl -pi -e '%s' {} +\n" "$DEVOPS_HOME" 's/\r$//'
     ok=0
   else
     log_ok "line endings (LF)"

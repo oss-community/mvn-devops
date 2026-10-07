@@ -40,6 +40,7 @@ spec:
     targetRevision: $(value GITOPS_BRANCH gitops)
     path: environments/$env
     helm:
+      releaseName: $(image_app_name)
       valueFiles:
         - environment.yaml
   destination:

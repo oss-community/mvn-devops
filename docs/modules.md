@@ -12,6 +12,7 @@
 | Image security | any | `trivy`, `syft`, `cosign` |
 | Deployment | one or none | `docker-host`, `kubernetes` |
 | GitOps | one or none | `argocd` (adds `kubernetes`) |
+| Secrets | any | `vault`, `sealed-secrets` (adds `kubernetes`) |
 
 **Artifactory OSS** does not allow creating repositories through its API.
 After `configure`, open Artifactory, choose Quick Setup > Maven and enter the

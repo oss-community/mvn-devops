@@ -9,7 +9,9 @@
 # deploy uses the image of the current commit by default; rollback the image
 # that ran before the current one.  The machine keeps one directory per
 # application and environment ($HOME/mvn-devops/<name>-<environment>) with the
-# compose file and the current and previous tags.
+# compose file and the current and previous tags.  The secrets of the
+# environment (app-secrets.sh) go to secrets.yml there, readable only by the
+# deploy user.
 set -eu
 
 environment=$1
@@ -38,6 +40,16 @@ printf '%s' "$DEPLOY_SSH_KEY_B64" | base64 -d > "$work/key"
 chmod 600 "$work/key"
 printf '%s' "${DEPLOY_KNOWN_HOSTS_B64:-}" | base64 -d > "$work/known_hosts"
 
+# The environment's secrets as a compose file, $ escaped from interpolation.
+secrets=$(sh "$(dirname "$0")/app-secrets.sh" "$environment")
+if [ "$secrets" = '{}' ]; then
+  secrets_yml='services: {app: {environment: {}}}'
+else
+  jq=$(command -v jq 2> /dev/null || sh "$(dirname "$0")/tool.sh" jq)
+  secrets_yml=$(printf '%s' "$secrets" | "$jq" -r '"services:\n  app:\n    environment:\n" +
+    (to_entries | map("      " + (.key | tojson) + ": " + (.value | gsub("\\$"; "$$") | tojson)) | join("\n"))')
+fi
+
 # Single-quoted for the remote shell.
 q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
@@ -47,6 +59,7 @@ q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
     "$(q "$DEPLOY_NAME")" "$(q "$port")" "$(q "$DEPLOY_CONTAINER_PORT")"
   printf 'check=%s\n' "$(q "http://$DEPLOY_CHECK_HOST:$port$DEPLOY_HEALTH_PATH")"
   printf 'registry_user=%s registry_password=%s\n' "$(q "${IMAGE_REGISTRY_USERNAME:-}")" "$(q "${IMAGE_REGISTRY_PASSWORD:-}")"
+  printf 'secrets_b64=%s\n' "$(printf '%s\n' "$secrets_yml" | base64 | tr -d '\n')"
   cat <<'REMOTE'
 set -eu
 dir=$HOME/mvn-devops/$name-$environment
@@ -74,14 +87,15 @@ services:
       - "$port:$container_port"
     environment:
       DEPLOY_ENVIRONMENT: $environment
-    # Settings and secrets of this environment, kept on the machine.
+    # Settings of this environment, kept on the machine.
     env_file:
       - path: app.env
         required: false
 EOF
+(umask 077; printf '%s' "$secrets_b64" | base64 -d > secrets.yml)
 
 start() {
-  printf 'TAG=%s\n' "$1" > .env
+  printf 'TAG=%s\nCOMPOSE_FILE=compose.yml:secrets.yml\n' "$1" > .env
   docker compose pull --quiet && docker compose up --detach --remove-orphans
 }
 

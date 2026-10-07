@@ -35,6 +35,12 @@ canary:
 # Extra environment variables of the container.
 env: {}
 
+# Secret environment variables (names and values), kept in the Secret
+# <release>-env; sealedSecretEnv holds them encrypted by kubeseal instead
+# (needs the Sealed Secrets controller), for releases kept in git.
+secretEnv: {}
+sealedSecretEnv: {}
+
 resources:
   requests:
     cpu: 100m

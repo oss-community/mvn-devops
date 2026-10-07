@@ -107,9 +107,10 @@ Each deployment:
 3. when it does not answer, puts back the image that ran before and fails the
    stage.
 
-The container gets `DEPLOY_ENVIRONMENT` (`staging` or `production`). Settings
-and secrets of an environment go in `app.env` in that directory on the
-machine; it is never overwritten.
+The container gets `DEPLOY_ENVIRONMENT` (`staging` or `production`), the
+environment's secrets from Vault (see [Secrets](#secrets)), written to
+`secrets.yml` in that directory, and the settings in `app.env` there, which
+you keep on the machine; it is never overwritten.
 
 ### The machines
 
@@ -179,7 +180,10 @@ application stays up. When the new version does not become ready within
 **The generic chart** ([templates/helm/app](../templates/helm/app)) has a
 Deployment with readiness and liveness probes, resource requests, a rolling
 update strategy and a Service. The container gets `DEPLOY_ENVIRONMENT`, and
-every key of the Secret `<app>-env` in its namespace when it exists:
+every key of the Secret `<app>-env` in its namespace. With Vault (see
+[Secrets](#secrets)) the release creates that Secret from the environment's
+secrets (`secretEnv`) and the pods wait for it; without, it is used when it
+exists:
 
 ```bash
 kubectl --namespace hello-api-production create secret generic hello-api-env --from-literal=GREETING=hello
@@ -188,7 +192,7 @@ kubectl --namespace hello-api-production create secret generic hello-api-env --f
 A private registry gets an image pull secret from the registry credentials.
 **A chart of your own** receives the same values: `image.repository`,
 `image.tag`, `registryAuth`, `environment`, `replicas`, `containerPort`,
-`healthPath` and `service.nodePort`.
+`healthPath`, `service.nodePort`, and `secretEnv` or `sealedSecretEnv`.
 
 **k3s in Docker** is a one-node cluster on your machine. It pulls from the
 local registry through its service name, so the image reference stays
@@ -241,3 +245,59 @@ steps with `canary.steps` in a chart of your own.
 Images from a private registry need an image pull secret in the namespace;
 GitOps never writes credentials to git. Create it once, or keep it in git
 encrypted with Sealed Secrets.
+
+## Secrets
+
+The `vault` module (*Secrets* category) keeps the application's secrets in
+HashiCorp Vault, one KV secret per environment:
+
+```
+secret/<app>/staging      e.g. GREETING=..., SPRING_DATASOURCE_PASSWORD=...
+secret/<app>/production
+```
+
+The deploy stage reads the secret of its environment
+([app-secrets.sh](../templates/scripts/app-secrets.sh)) and the application
+gets each key as an environment variable, which Spring Boot maps to its
+properties. Where they go depends on the deployment:
+
+| Deployment | Where the secrets are |
+|---|---|
+| `docker-host` | `secrets.yml` next to the compose file on the machine, readable only by the deploy user |
+| `kubernetes` | the Secret `<app>-env` of the Helm release; new pods when it changes |
+| `argocd` with `sealed-secrets` | a SealedSecret in `environments/<environment>/environment.yaml` of the GitOps branch, encrypted for the cluster |
+| `argocd` alone | the Secret `<app>-env`, put in the cluster by the pipeline, not in git |
+
+A deployment picks up changed secrets the next time it runs; a rollback with
+Helm (`rollback` without `--to`) brings back the secrets of that revision.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `VAULT_SERVER_URL` | empty | an existing Vault; empty: Vault in Docker |
+| `VAULT_TOKEN` | | existing Vault: a token that may read `<mount>/data/<app>/*`; it should be periodic or long-lived |
+| `VAULT_HOST_PORT` | 8200 | Vault in Docker: its port on this machine |
+| `VAULT_KV_MOUNT` | `secret` | mount path of the KV version 2 secrets engine |
+
+**Vault in Docker** keeps its data in a volume. `configure` initialises it
+once (one unseal key; the key and the root token stay in `.devops/values`),
+enables the KV engine, and gives the pipeline a token that may only read the
+application's secrets and is renewed on every run. Vault starts sealed after
+every restart: run `devops.sh configure` to unseal it. Write secrets in the
+web console (`devops.sh urls`) or with the Vault CLI in the container:
+
+```bash
+./devops.sh compose exec -e VAULT_ADDR=http://127.0.0.1:8200 \
+  -e VAULT_TOKEN="$(./devops.sh get VAULT_ROOT_TOKEN)" vault \
+  vault kv put secret/hello-api/staging GREETING=Hi
+```
+
+**Sealed Secrets** (`sealed-secrets`, adds `kubernetes`): `configure`
+installs the controller in `kube-system`. With Argo CD the pipeline encrypts
+each secret with `kubeseal` for its namespace and name (strict scope), so the
+release in git carries it, and only the controller in the cluster can decrypt
+it. Seal secrets of your own the same way:
+
+```bash
+kubectl create secret generic db --dry-run=client --output yaml --from-literal=password=... \
+  | kubeseal --controller-namespace kube-system --format yaml > sealed-db.yaml
+```

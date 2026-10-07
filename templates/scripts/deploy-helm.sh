@@ -8,7 +8,8 @@
 #
 # deploy uses the image of the current commit by default; rollback without a
 # tag goes back to the previous Helm revision.  The release is $DEPLOY_NAME in
-# the namespace $DEPLOY_NAME-<environment>.
+# the namespace $DEPLOY_NAME-<environment>.  The secrets of the environment
+# (app-secrets.sh) go to the Secret $DEPLOY_NAME-env there.
 set -eu
 
 environment=$1
@@ -33,6 +34,7 @@ chmod 600 "$work/kubeconfig"
 export KUBECONFIG="$work/kubeconfig"
 
 if [ "$action" = rollback ] && [ -z "$tag" ]; then
+  # The previous revision with the secrets it had.
   "$helm" rollback "$release" --namespace "$namespace" --wait --timeout "$timeout"
   "$helm" history "$release" --namespace "$namespace" --max 3
   exit 0
@@ -51,6 +53,7 @@ if [ -n "${IMAGE_REGISTRY_PASSWORD:-}" ]; then
   auth=$(printf '%s:%s' "$IMAGE_REGISTRY_USERNAME" "$IMAGE_REGISTRY_PASSWORD" | base64 | tr -d '\n')
   registry_auth=$(printf '{"auths":{"%s":{"auth":"%s"}}}' "$registry" "$auth")
 fi
+secrets=$(sh "$scripts/app-secrets.sh" "$environment")
 cat > "$work/values.yaml" <<EOF
 {
   "image": {"repository": $(json "$IMAGE_DEPLOY_REPOSITORY"), "tag": $(json "$tag")},
@@ -59,7 +62,8 @@ cat > "$work/values.yaml" <<EOF
   "replicas": ${KUBERNETES_REPLICAS:-2},
   "containerPort": ${DEPLOY_CONTAINER_PORT:-8080},
   "healthPath": $(json "${DEPLOY_HEALTH_PATH:-/actuator/health}"),
-  "service": {"nodePort": $(json "$node_port")}
+  "service": {"nodePort": $(json "$node_port")},
+  "secretEnv": $secrets
 }
 EOF
 

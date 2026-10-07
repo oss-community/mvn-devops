@@ -37,6 +37,9 @@ spec:
     metadata:
       labels:
         {{- include "app.labels" . | nindent 8 }}
+      annotations:
+        # New pods when the secrets change.
+        checksum/env: {{ list .Values.secretEnv .Values.sealedSecretEnv | toJson | sha256sum }}
     spec:
       {{- if .Values.registryAuth }}
       imagePullSecrets:
@@ -56,11 +59,12 @@ spec:
             - name: {{ $name }}
               value: {{ $value | quote }}
             {{- end }}
-          # Settings and secrets of the environment, managed outside the chart.
+          # Secrets of the environment: from the values, or managed outside the
+          # chart.  Pods wait for the secret when the values have it.
           envFrom:
             - secretRef:
                 name: {{ .Release.Name }}-env
-                optional: true
+                optional: {{ not (or .Values.secretEnv .Values.sealedSecretEnv) }}
           readinessProbe:
             httpGet:
               path: {{ .Values.healthPath }}

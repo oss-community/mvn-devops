@@ -201,6 +201,34 @@ devops secrets > /dev/null
 ! grep -q verify-image <<< "$(devops stages)" || fail "security: verify-image without a deployment"
 printf 'ok  security\n'
 
+# Secrets: Vault by its service name where the pipeline runs in Docker;
+# Sealed Secrets brings Kubernetes.
+for orchestrator in maven jenkins; do
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --orchestrator "$orchestrator" --with docker-registry,docker-host,vault > /dev/null
+  devops secrets > /dev/null
+  env_out=$(devops env --show)
+  expected=http://localhost:8200; [[ $orchestrator == jenkins ]] && expected=http://vault:8200
+  grep -qx "VAULT_ADDR=$expected" <<< "$env_out" || fail "vault: $orchestrator reaches Vault at the wrong address"
+  grep -qx 'VAULT_APP=demo-app' <<< "$env_out" || fail "vault: application path"
+  grep -qx 'VAULT_TOKEN=' <<< "$env_out" || grep -qx 'VAULT_TOKEN=\*\*\*\*\*\*\*\*' <<< "$env_out" || fail "vault: token not secret"
+done
+[[ $(env -i PATH="$PATH" sh "$ROOT/templates/scripts/app-secrets.sh" staging) == '{}' ]] || fail "secrets: not empty without Vault"
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with docker-registry,argocd,vault,sealed-secrets > /dev/null
+grep -q 'deploy/kubernetes' "$project/devops.conf" || fail "sealed-secrets: kubernetes module not added"
+devops secrets > /dev/null
+grep -qx 'SEALED_SECRETS=yes' <<< "$(devops env --show)" || fail "sealed-secrets: SEALED_SECRETS not set"
+helm=$(sh "$ROOT/templates/scripts/tool.sh" helm 2> /dev/null || true)
+if [[ -n $helm ]]; then
+  chart=$("$helm" template app "$ROOT/templates/helm/app" --set secretEnv.GREETING=hi)
+  grep -q 'GREETING: "hi"' <<< "$chart" || fail "chart: no Secret from secretEnv"
+  grep -q 'optional: false' <<< "$chart" || fail "chart: pods do not wait for the secret"
+  chart=$("$helm" template app "$ROOT/templates/helm/app" --set sealedSecretEnv.GREETING=AgB)
+  grep -q 'kind: SealedSecret' <<< "$chart" || fail "chart: no SealedSecret from sealedSecretEnv"
+fi
+printf 'ok  secrets\n'
+
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"
 rm -rf "$project/.devops" "$project/devops.conf"

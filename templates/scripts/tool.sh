@@ -2,7 +2,7 @@
 # Prints the path of a pinned command line tool, downloading it from its
 # official release on first use and checking it against the release checksums.
 #
-#   tool.sh <trivy|syft|cosign|helm|kubectl>
+#   tool.sh <trivy|syft|cosign|helm|kubectl|kubeseal|jq>
 #
 # Tools are cached in $DEVOPS_TOOLS (default ~/.cache/mvn-devops/tools), one
 # directory per version.  <NAME>_VERSION overrides a version, e.g.
@@ -58,6 +58,18 @@ case $name in
     url=${DEVOPS_KUBECTL_MIRROR:-https://dl.k8s.io/release}/v$version/bin/$os/$arch
     asset=kubectl$exe
     sums=kubectl$exe.sha256 ;;
+  kubeseal)
+    version=${KUBESEAL_VERSION:-0.40.0}
+    url=$github/bitnami-labs/sealed-secrets/releases/download/v$version
+    asset=kubeseal-$version-$os-$arch.tar.gz
+    sums=sealed-secrets_${version}_checksums.txt
+    member=kubeseal$exe ;;
+  jq)
+    version=${JQ_VERSION:-1.8.1}
+    case $os in darwin) o=macos ;; *) o=$os ;; esac
+    url=$github/jqlang/jq/releases/download/jq-$version
+    asset=jq-$o-$arch$exe
+    sums=sha256sum.txt ;;
   *) echo "tool.sh: unknown tool $name" >&2; exit 1 ;;
 esac
 

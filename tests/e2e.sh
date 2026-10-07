@@ -92,6 +92,20 @@ run_pipeline() {
   esac
 }
 
+# greeting <environment>: the GREETING secret of the environment in Vault,
+# with a $ that must not be interpolated on the way.
+greeting() { printf 'Hola-%s $5' "$1"; }
+if [[ ,$WITH, == *,vault,* ]]; then
+  step "Secrets in Vault"
+  for env in staging production; do
+    jq -n --arg g "$(greeting "$env")" '{data: {GREETING: $g}}' \
+      | curl -fsS -o /dev/null -X POST -H "X-Vault-Token: $(devops get VAULT_ROOT_TOKEN)" --data @- \
+        "http://localhost:$(devops get VAULT_HOST_PORT)/v1/secret/data/$(devops get IMAGE_NAME)/$env" \
+      || fail "could not write the secrets of $env to Vault"
+  done
+  printf 'ok  GREETING of staging and production in Vault\n'
+fi
+
 step "devops.sh run"
 run_pipeline
 
@@ -162,6 +176,10 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     done
     [[ -n ${answer:-} ]] || fail "$1 does not answer on port $port"
     jq -e --arg env "$1" '.environment == $env' <<< "$answer" > /dev/null || fail "$1 answers $answer"
+    if [[ ,$WITH, == *,vault,* ]]; then
+      jq -e --arg m "$(greeting "$1"), e2e!" '.message == $m' <<< "$answer" > /dev/null \
+        || fail "$1 does not greet with its secret from Vault: $answer"
+    fi
     printf '%s\n' "${image##*:}"
   }
   prod_port=$(devops get DEPLOY_PRODUCTION_PORT 2> /dev/null || devops get KUBERNETES_PRODUCTION_PORT)

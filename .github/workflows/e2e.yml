@@ -47,6 +47,12 @@ jobs:
             with: docker-registry,argocd
           - orchestrator: concourse
             with: docker-registry,argocd
+          - orchestrator: maven
+            with: docker-registry,docker-host,vault
+          - orchestrator: concourse
+            with: docker-registry,kubernetes,vault
+          - orchestrator: jenkins
+            with: docker-registry,argocd,vault,sealed-secrets
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

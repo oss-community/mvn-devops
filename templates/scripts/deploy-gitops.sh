@@ -6,6 +6,11 @@
 # release is committed again.  Stage script of the gitops/argocd module;
 # "devops.sh rollback" runs it too.
 #
+# The secrets of the environment (app-secrets.sh) are committed encrypted, as
+# a SealedSecret, with the secrets/sealed-secrets module (SEALED_SECRETS=yes);
+# otherwise they are put in the cluster directly, as the Secret <app>-env in
+# the namespace <app>-<environment>.
+#
 #   deploy-gitops.sh <staging|production> [deploy [TAG] | rollback [TAG]]
 #
 # deploy uses the image of the current commit by default; rollback without a
@@ -68,6 +73,32 @@ fi
 
 json() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"; }
 
+# secret_values: the environment's secrets for environment.yaml, sealed for
+# the cluster's Sealed Secrets controller; without one they go to the cluster.
+secrets=$(sh "$scripts/app-secrets.sh" "$environment")
+secret_values=''
+if [ "$secrets" != '{}' ]; then
+  jq=$(command -v jq 2> /dev/null || sh "$scripts/tool.sh" jq)
+  if [ "${SEALED_SECRETS:-no}" = yes ]; then
+    kubeseal=$(sh "$scripts/tool.sh" kubeseal)
+    "$kubeseal" --fetch-cert --controller-namespace kube-system --controller-name sealed-secrets-controller > "$work/seal.pem"
+    sealed='{}'
+    for key in $(printf '%s' "$secrets" | "$jq" -r 'keys[]'); do
+      value=$(printf '%s' "$secrets" | "$jq" -j --arg k "$key" '.[$k]' \
+        | "$kubeseal" --raw --scope strict --namespace "$app" --name "$DEPLOY_NAME-env" --cert "$work/seal.pem")
+      sealed=$(printf '%s' "$sealed" | "$jq" -c --arg k "$key" --arg v "$value" '. + {($k): $v}')
+    done
+    secret_values=",
+  \"sealedSecretEnv\": $sealed"
+  else
+    echo "No Sealed Secrets in the cluster: the secrets of $environment go to the Secret $DEPLOY_NAME-env, not to $GITOPS_BRANCH"
+    "$kubectl" create namespace "$app" --dry-run=client --output yaml | "$kubectl" apply --filename - > /dev/null
+    printf '%s' "$secrets" | "$jq" --arg n "$DEPLOY_NAME-env" --arg ns "$app" \
+      '{apiVersion: "v1", kind: "Secret", metadata: {name: $n, namespace: $ns}, type: "Opaque", stringData: .}' \
+      | "$kubectl" apply --filename - > /dev/null
+  fi
+fi
+
 # release <tag> <message>: commits the environment at <tag> and pushes it.
 release() {
   rm -rf "$dir"
@@ -81,7 +112,7 @@ release() {
   "containerPort": ${DEPLOY_CONTAINER_PORT:-8080},
   "healthPath": $(json "${DEPLOY_HEALTH_PATH:-/actuator/health}"),
   "service": {"nodePort": $(json "$node_port")},
-  "canary": {"enabled": $canary}
+  "canary": {"enabled": $canary}$secret_values
 }
 EOF
   git add --all

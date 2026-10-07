@@ -52,10 +52,16 @@ GitHub release.
   has synced it and the application is healthy; a release that does not
   become healthy is reverted in git. Production is released as a canary with
   Argo Rollouts. `configure` installs both in the cluster.
+- Secrets (`vault`, `sealed-secrets`): the deploy stage reads the secrets of
+  its environment from Vault and passes them to the application as
+  environment variables, on the machine, as a Kubernetes Secret, or with
+  Argo CD as a SealedSecret in the GitOps branch. Vault in Docker is
+  initialised and unsealed by `configure`; the pipeline gets a read-only,
+  renewed token. `configure` installs the Sealed Secrets controller.
 - `tests/git-server.py`, a git server for the end-to-end test that accepts
   pushes.
 - `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft
-  1.54.1, Cosign 3.1.3, Helm 4.3.0, kubectl 1.37.1) where the pipeline runs, checked against their
+  1.54.1, Cosign 3.1.3, Helm 4.3.0, kubectl 1.37.1, kubeseal 0.40.0, jq 1.8.1) where the pipeline runs, checked against their
   release checksums and cached in `~/.cache/mvn-devops/tools`.
 
 ### Changed

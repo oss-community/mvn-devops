@@ -30,11 +30,11 @@ jobs:
           - orchestrator: concourse
             with: sonarqube,nexus
           - orchestrator: maven
-            with: docker-registry,docker-host
+            with: docker-registry,docker-host,trivy,syft,cosign
           - orchestrator: jenkins
-            with: docker-registry,docker-host
+            with: docker-registry,docker-host,trivy,syft,cosign
           - orchestrator: concourse
-            with: docker-registry,docker-host
+            with: docker-registry,docker-host,trivy,syft,cosign
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

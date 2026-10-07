@@ -29,14 +29,26 @@ image_secrets() {
   ask IMAGE_PORT "Port the application listens on in the container" 8080
 }
 
-# image_env <push repository> <deploy repository> [user] [password]
+# image_env <push repository> <deploy repository> [user] [password] [insecure]
 #   push repository    where the pipeline pushes, as the pipeline reaches the registry
 #   deploy repository  the same image as the machines that run it pull it
+#   insecure           1 for a registry without TLS
+# The image stage writes the digest of the pushed image to IMAGE_DIGEST_FILE.
 image_env() {
+  local module
+  module=$(value IMAGE_MODULE)
   pipeline_var IMAGE_REPOSITORY "$1"
   pipeline_var IMAGE_DEPLOY_REPOSITORY "$2"
   pipeline_var IMAGE_REGISTRY_USERNAME "${3:-}"
   pipeline_secret IMAGE_REGISTRY_PASSWORD "${4:-}"
+  pipeline_var IMAGE_REGISTRY_INSECURE "${5:-0}"
+  pipeline_var IMAGE_DIGEST_FILE "${module:+$module/}target/jib-image.digest"
+}
+
+# Modules that work on the image (deployment, security) need an image module.
+require_image_module() {
+  [[ " $MODULES " == *" image/"* ]] \
+    || die "$(module_field "$MODULE_ID" MODULE_TITLE) needs an image; select a module of 'Container image' with '$DEVOPS_CMD init'."
 }
 
 # image_stages <insecure> <auth>: insecure=1 for a registry without TLS,

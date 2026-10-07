@@ -13,8 +13,7 @@
 ENVIRONMENTS='staging production'
 
 module_secrets() {
-  [[ " $MODULES " == *" image/"* ]] \
-    || die "The deployment needs an image; select a module of 'Container image' with '$DEVOPS_CMD init'."
+  require_image_module
   ask_server DEPLOY "Staging machine" ssh://deploy@staging.example.com
   if server_external DEPLOY; then
     ask DEPLOY_PRODUCTION_SERVER_URL "Production machine: URL such as ssh://deploy@app.example.com" "$(value DEPLOY_SERVER_URL)"

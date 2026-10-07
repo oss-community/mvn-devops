@@ -37,6 +37,14 @@ GitHub release.
   Concourse.
 - `devops.sh rollback [staging|production] [--to TAG]`.
 - Categories can be `optional`: at most one module, or none.
+- Image security: Trivy scans the pushed image and fails on fixable
+  vulnerabilities of `TRIVY_FAIL_ON` (default CRITICAL), Syft writes its SBOM
+  (SPDX and CycloneDX), Cosign signs it with a project key, attests the SBOM
+  and checks the signature before production. Signatures stay in the
+  registry; the public Sigstore services are not used.
+- `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft
+  1.54.1, Cosign 3.1.3) where the pipeline runs, checked against their
+  release checksums and cached in `~/.cache/mvn-devops/tools`.
 
 ### Changed
 

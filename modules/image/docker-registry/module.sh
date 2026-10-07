@@ -56,9 +56,9 @@ module_env() {
   fi
   port=$(value REGISTRY_HOST_PORT 5000)
   if [[ ${DEVOPS_RUNS_IN:-host} == docker ]]; then
-    image_env "registry:5000/$image" "localhost:$port/$image"
+    image_env "registry:5000/$image" "localhost:$port/$image" '' '' 1
   else
-    image_env "$(devops_host):$port/$image" "localhost:$port/$image"
+    image_env "$(devops_host):$port/$image" "localhost:$port/$image" '' '' 1
   fi
 }
 

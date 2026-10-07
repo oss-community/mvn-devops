@@ -156,6 +156,26 @@ devops init --orchestrator maven --with docker-host > /dev/null
 ! devops secrets > /dev/null 2>&1 || fail "deploy: accepted without an image module"
 printf 'ok  deploy\n'
 
+# Image security: SBOM, scan and signature after the image, verification before production.
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator concourse --with docker-registry,docker-host,trivy,syft,cosign > /dev/null
+mkdir -p "$project/.devops/values" && printf '%s' "$WORK/cosign.key" > "$project/.devops/values/COSIGN_KEY_FILE"
+printf 'unused' > "$WORK/cosign.key"; printf 'unused' > "$WORK/cosign.pub"
+devops secrets > /dev/null
+stages=$(devops stages | awk 'NR > 1 { print $1 ":" $3 }' | tr '\n' ' ')
+[[ $stages == *"75:image 76:sbom 77:scan-image 78:sign-image 80:deploy-staging 89:verify-image 90:deploy-production "* ]] \
+  || fail "security: stage order $stages"
+devops render > /dev/null
+grep -q 'path: .tools' "$project/.devops/generated/concourse/pipeline.yml" || fail "security: concourse does not cache tools"
+env_out=$(devops env --show)
+grep -q '^COSIGN_KEY_B64=\*\*\*\*\*\*\*\*$' <<< "$env_out" || fail "security: Cosign key is not secret"
+rm -rf "$project/.devops" "$project/devops.conf"
+devops init --orchestrator maven --with docker-registry,cosign > /dev/null
+mkdir -p "$project/.devops/values" && printf '%s' "$WORK/cosign.key" > "$project/.devops/values/COSIGN_KEY_FILE"
+devops secrets > /dev/null
+! grep -q verify-image <<< "$(devops stages)" || fail "security: verify-image without a deployment"
+printf 'ok  security\n'
+
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"
 rm -rf "$project/.devops" "$project/devops.conf"

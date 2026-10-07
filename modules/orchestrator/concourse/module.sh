@@ -53,13 +53,14 @@ render_job() {
   printf '          image_resource:\n            type: registry-image\n            source:\n'
   printf '              repository: %s\n              tag: %s\n' "${image%:*}" "$(yaml_quote "${image##*:}")"
   printf '          inputs:\n            - name: source\n'
-  printf '          caches:\n            - path: .m2\n'
+  printf '          caches:\n            - path: .m2\n            - path: .tools\n'
   printf '          params:\n'
   while IFS= read -r key; do
     printf '            %s: ((%s))\n' "$key" "$key"
   done < "$DEVOPS_ENV/pipeline.keys"
   printf '          run:\n            dir: source\n            path: sh\n            args:\n              - -ec\n              - |\n'
-  printf '                command -v git > /dev/null || { apt-get update -qq && apt-get install -y -qq git openssh-client > /dev/null; }\n'
+  printf '                export DEVOPS_TOOLS="$PWD/../.tools"\n'
+  printf '                { command -v git && command -v ssh && command -v curl; } > /dev/null || { apt-get update -qq && apt-get install -y -qq git openssh-client curl > /dev/null; }\n'
   printf '                %s\n' "$(pipeline_ci_setup)"
   while IFS='|' read -r _ phase name args; do
     case $job:$phase in

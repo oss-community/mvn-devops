@@ -68,6 +68,7 @@ GITHUB_URL=http://$HOST_IP:$GIT_PORT
 GITHUB_REPOSITORY=e2e/$EXAMPLE
 NEXUS_ACCEPT_EULA=yes
 JENKINS_TRIGGER=none
+TRIVY_FAIL_ON=
 EOF
 git config --global user.name > /dev/null 2>&1 || git config --global user.name e2e
 git config --global user.email > /dev/null 2>&1 || git config --global user.email e2e@example.com
@@ -119,6 +120,25 @@ if [[ ,$WITH, == *,docker-registry,* ]]; then
   docker rm -f e2e-image > /dev/null
   [[ $health == *UP* ]] || fail "the image does not start: $health"
   printf 'ok  the registry has the image %s and it starts\n' "$tag"
+fi
+if [[ ,$WITH, == *,syft,* && $ORCHESTRATOR == maven ]]; then
+  jq -e '.packages | length > 10' "$project/target/sbom.spdx.json" > /dev/null || fail "no SBOM in target/sbom.spdx.json"
+  printf 'ok  SBOM with %s packages\n' "$(jq '.packages | length' "$project/target/sbom.spdx.json")"
+fi
+if [[ ,$WITH, == *,trivy,* && $ORCHESTRATOR == maven ]]; then
+  jq -e '.ArtifactName' "$project/target/trivy-report.json" > /dev/null || fail "no Trivy report"
+  printf 'ok  Trivy report of %s\n' "$(jq -r .ArtifactName "$project/target/trivy-report.json")"
+fi
+if [[ ,$WITH, == *,cosign,* ]]; then
+  cosign=$(sh "$ROOT/templates/scripts/tool.sh" cosign)
+  image="localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$(git -C "$project" rev-parse --short=12 HEAD)"
+  "$cosign" verify --key "$project/.devops/keys/cosign.pub" --insecure-ignore-tlog=true --allow-http-registry \
+    "$image" > /dev/null 2>&1 || fail "$image has no signature of the project key"
+  if [[ ,$WITH, == *,syft,* ]]; then
+    "$cosign" verify-attestation --key "$project/.devops/keys/cosign.pub" --insecure-ignore-tlog=true \
+      --allow-http-registry --type spdxjson "$image" > /dev/null 2>&1 || fail "$image has no SBOM attestation"
+  fi
+  printf 'ok  %s is signed\n' "$image"
 fi
 if [[ ,$WITH, == *,docker-host,* ]]; then
   # app_check <environment>: prints the tag that runs and checks the answer.

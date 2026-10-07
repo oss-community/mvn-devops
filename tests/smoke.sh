@@ -229,6 +229,29 @@ if [[ -n $helm ]]; then
 fi
 printf 'ok  secrets\n'
 
+# Database: migrations checked in ci against the database by its service name;
+# the deployment gets the connection.
+for orchestrator in maven concourse; do
+  rm -rf "$project/.devops" "$project/devops.conf"
+  devops init --orchestrator "$orchestrator" --with docker-registry,kubernetes,postgresql > /dev/null
+  devops secrets > /dev/null
+  stages=$(devops stages)
+  grep -q '^35 *ci *migrate .*flyway-maven-plugin:12.4.0:clean.*:migrate.*:validate' <<< "$stages" || fail "database: $orchestrator migrate stage"
+  env_out=$(devops env --show)
+  expected=jdbc:postgresql://localhost:5433/demo_app; [[ $orchestrator == concourse ]] && expected=jdbc:postgresql://database:5432/demo_app
+  grep -qx "DATABASE_CI_URL=$expected" <<< "$env_out" || fail "database: $orchestrator reaches the ci database at the wrong address"
+  grep -qx 'DATABASE_PRODUCTION_PASSWORD=\*\*\*\*\*\*\*\*' <<< "$env_out" || fail "database: password not secret"
+done
+secrets=$(DATABASE_ENGINE=postgresql DATABASE_NAME=demo_app DATABASE_STAGING_PASSWORD=pw \
+  sh "$ROOT/templates/scripts/app-secrets.sh" staging demo-app-db)
+[[ $secrets == *'"SPRING_DATASOURCE_URL": "jdbc:postgresql://demo-app-db:5432/demo_app"'*'"SPRING_DATASOURCE_PASSWORD": "pw"'* ]] \
+  || fail "database: connection in the secrets: $secrets"
+if [[ -n $helm ]]; then
+  chart=$("$helm" template app "$ROOT/templates/helm/app" --set database.enabled=true --set database.name=demo_app)
+  grep -q 'kind: StatefulSet' <<< "$chart" || fail "chart: no database"
+fi
+printf 'ok  database\n'
+
 # A Dockerfile is built with Docker where the pipeline runs on this machine.
 touch "$project/Dockerfile"
 rm -rf "$project/.devops" "$project/devops.conf"

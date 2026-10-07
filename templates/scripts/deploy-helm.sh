@@ -53,7 +53,12 @@ if [ -n "${IMAGE_REGISTRY_PASSWORD:-}" ]; then
   auth=$(printf '%s:%s' "$IMAGE_REGISTRY_USERNAME" "$IMAGE_REGISTRY_PASSWORD" | base64 | tr -d '\n')
   registry_auth=$(printf '{"auths":{"%s":{"auth":"%s"}}}' "$registry" "$auth")
 fi
-secrets=$(sh "$scripts/app-secrets.sh" "$environment")
+database='{"enabled": false}' db_host=''
+if [ "${DATABASE_ENGINE:-}" = postgresql ]; then
+  database="{\"enabled\": true, \"image\": $(json "$DATABASE_IMAGE"), \"name\": $(json "$DATABASE_NAME")}"
+  db_host=$release-db
+fi
+secrets=$(sh "$scripts/app-secrets.sh" "$environment" $db_host)
 cat > "$work/values.yaml" <<EOF
 {
   "image": {"repository": $(json "$IMAGE_DEPLOY_REPOSITORY"), "tag": $(json "$tag")},
@@ -63,6 +68,7 @@ cat > "$work/values.yaml" <<EOF
   "containerPort": ${DEPLOY_CONTAINER_PORT:-8080},
   "healthPath": $(json "${DEPLOY_HEALTH_PATH:-/actuator/health}"),
   "service": {"nodePort": $(json "$node_port")},
+  "database": $database,
   "secretEnv": $secrets
 }
 EOF

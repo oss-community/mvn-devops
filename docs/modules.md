@@ -12,6 +12,7 @@
 | Image security | any | `trivy`, `syft`, `cosign` |
 | Deployment | one or none | `docker-host`, `kubernetes` |
 | GitOps | one or none | `argocd` (adds `kubernetes`) |
+| Database | one or none | `postgresql` |
 | Secrets | any | `vault`, `sealed-secrets` (adds `kubernetes`) |
 
 **Artifactory OSS** does not allow creating repositories through its API.
@@ -27,6 +28,7 @@ ORDER  PHASE STAGE            MAVEN ARGUMENTS
 10     ci   validate         validate
 20     ci   build            clean package -DskipTests=true
 30     ci   test             test
+35     ci   migrate          flyway-maven-plugin:12.4.0:clean ...:migrate ...:validate -Dflyway.url=$DATABASE_CI_URL ...
 40     ci   checkstyle       maven-checkstyle-plugin:3.6.0:check -Dcheckstyle.config.location=google_checks.xml
 45     ci   sonar            sonar-maven-plugin:5.8.0.7211:sonar -Dsonar.host.url=$SONAR_URL -Dsonar.token=$SONAR_TOKEN
 50     ci   install          install -DskipTests=true

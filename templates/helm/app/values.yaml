@@ -41,6 +41,15 @@ env: {}
 secretEnv: {}
 sealedSecretEnv: {}
 
+# A PostgreSQL for the environment (a StatefulSet <release>-db); the
+# application reaches it at <release>-db:5432 with the connection in
+# secretEnv (SPRING_DATASOURCE_URL, _USERNAME, _PASSWORD).
+database:
+  enabled: false
+  image: postgres:18
+  name: ""
+  storage: 1Gi
+
 resources:
   requests:
     cpu: 100m

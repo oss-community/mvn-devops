@@ -58,6 +58,11 @@ GitHub release.
   Argo CD as a SealedSecret in the GitOps branch. Vault in Docker is
   initialised and unsealed by `configure`; the pipeline gets a read-only,
   renewed token. `configure` installs the Sealed Secrets controller.
+- A database (`postgresql`): each environment gets its own PostgreSQL next to
+  the application (a container on the machine, a StatefulSet on Kubernetes)
+  and the application its connection as `SPRING_DATASOURCE_*`. A `migrate`
+  stage applies the Flyway migrations to an empty database in the ci phase.
+  `examples/hello-data` is a sample application with a database.
 - `tests/git-server.py`, a git server for the end-to-end test that accepts
   pushes.
 - `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft

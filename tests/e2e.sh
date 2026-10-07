@@ -4,8 +4,8 @@
 #
 #   tests/e2e.sh <orchestrator> [modules]     e.g. tests/e2e.sh jenkins sonarqube,nexus
 #
-# The example is examples/hello-maven, or examples/hello-api when an image is
-# built; E2E_EXAMPLE picks another one.
+# The example is examples/hello-maven, examples/hello-api when an image is
+# built, or examples/hello-data with a database; E2E_EXAMPLE picks another one.
 #
 # Needs Docker with internet access; CI runs it on GitHub's runners
 # (.github/workflows/e2e.yml).  The project is served from a local git
@@ -22,6 +22,7 @@ mkdir -p "$WORK"
 HOST_IP=${E2E_HOST_IP:-$(hostname -I | awk '{ print $1 }')}
 GIT_PORT=${E2E_GIT_PORT:-8765}
 case ,$WITH, in
+  *,postgresql,*) EXAMPLE=${E2E_EXAMPLE:-hello-data} ;;
   *,docker-registry,* | *,github-container,*) EXAMPLE=${E2E_EXAMPLE:-hello-api} ;;
   *) EXAMPLE=${E2E_EXAMPLE:-hello-maven} ;;
 esac
@@ -41,7 +42,7 @@ cleanup() {
   fi
   [[ -n $server_pid ]] && kill "$server_pid" 2> /dev/null
   if [[ ${E2E_KEEP:-0} != 1 ]]; then
-    devops compose down --volumes --remove-orphans > /dev/null 2>&1 || true
+    devops destroy > /dev/null 2>&1 || true
   fi
   exit "$status"
 }
@@ -127,13 +128,24 @@ if [[ ,$WITH, == *,docker-registry,* ]]; then
   tags=$(curl -fsS "http://localhost:$(devops get REGISTRY_HOST_PORT)/v2/$(devops get IMAGE_NAME)/tags/list")
   jq -e --arg tag "$tag" '.tags | index($tag) and index("latest")' <<< "$tags" > /dev/null \
     || fail "the registry has no image tagged $tag and latest: $tags"
-  docker pull -q "localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$tag" > /dev/null
-  docker run -d --name e2e-image -p 18080:8080 "localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$tag" > /dev/null
-  for _ in $(seq 60); do curl -fsS -o /dev/null http://localhost:18080/actuator/health 2> /dev/null && break; sleep 2; done
-  health=$(curl -fsS http://localhost:18080/actuator/health || true)
-  docker rm -f e2e-image > /dev/null
-  [[ $health == *UP* ]] || fail "the image does not start: $health"
-  printf 'ok  the registry has the image %s and it starts\n' "$tag"
+  if [[ ,$WITH, == *,postgresql,* ]]; then
+    # The application needs its database; the deployments check that it starts.
+    printf 'ok  the registry has the image %s\n' "$tag"
+  else
+    docker pull -q "localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$tag" > /dev/null
+    docker run -d --name e2e-image -p 18080:8080 "localhost:$(devops get REGISTRY_HOST_PORT)/$(devops get IMAGE_NAME):$tag" > /dev/null
+    for _ in $(seq 60); do curl -fsS -o /dev/null http://localhost:18080/actuator/health 2> /dev/null && break; sleep 2; done
+    health=$(curl -fsS http://localhost:18080/actuator/health || true)
+    docker rm -f e2e-image > /dev/null
+    [[ $health == *UP* ]] || fail "the image does not start: $health"
+    printf 'ok  the registry has the image %s and it starts\n' "$tag"
+  fi
+fi
+if [[ ,$WITH, == *,postgresql,* ]]; then
+  applied=$(devops compose exec -T database psql -U "$(devops get DATABASE_NAME)" -d "$(devops get DATABASE_NAME)" -tAc \
+    'select count(*) from flyway_schema_history where success' 2>&1 || true)
+  [[ $applied =~ ^[1-9] ]] || fail "the migrate stage applied no migration to the ci database: $applied"
+  printf 'ok  the migrations apply to an empty database (%s)\n' "$applied"
 fi
 if [[ ,$WITH, == *,syft,* && $ORCHESTRATOR == maven ]]; then
   jq -e '.packages | length > 10' "$project/target/sbom.spdx.json" > /dev/null || fail "no SBOM in target/sbom.spdx.json"
@@ -176,6 +188,9 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     done
     [[ -n ${answer:-} ]] || fail "$1 does not answer on port $port"
     jq -e --arg env "$1" '.environment == $env' <<< "$answer" > /dev/null || fail "$1 answers $answer"
+    if [[ ,$WITH, == *,postgresql,* ]]; then
+      jq -r .visits <<< "$answer" > "$WORK/visits-$1"
+    fi
     if [[ ,$WITH, == *,vault,* ]]; then
       jq -e --arg m "$(greeting "$1"), e2e!" '.message == $m' <<< "$answer" > /dev/null \
         || fail "$1 does not greet with its secret from Vault: $answer"
@@ -207,5 +222,10 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
   devops rollback production
   [[ $(app_check production) == "$first" ]] || fail "rollback did not bring back $first"
   printf 'ok  rollback brought back %s\n' "$first"
+  if [[ ,$WITH, == *,postgresql,* ]]; then
+    # One visit per check of production: the data outlived two deployments.
+    [[ $(cat "$WORK/visits-production") == 3 ]] || fail "production's database lost visits: $(cat "$WORK/visits-production")"
+    printf 'ok  production kept its data through the releases\n'
+  fi
 fi
 printf '\nEnd-to-end test passed: %s with %s\n' "$ORCHESTRATOR" "$WITH"

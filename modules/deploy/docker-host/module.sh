@@ -179,11 +179,12 @@ module_rollback() {
 }
 
 # destroy: the simulated machine's applications run on this Docker daemon,
-# outside the compose project; stop them before the machine goes.
+# outside the compose project; remove them and their data before the
+# machine goes.
 module_destroy() {
   server_external DEPLOY && return 0
   compose exec -T deploy-host sh -c \
-    'for d in "$HOME"/mvn-devops/*/; do [ -f "$d/compose.yml" ] && (cd "$d" && docker compose down); done; true' \
+    'for d in "$HOME"/mvn-devops/*/; do [ -f "$d/compose.yml" ] && (cd "$d" && docker compose down --volumes); done; true' \
     > /dev/null 2>&1 || true
 }
 

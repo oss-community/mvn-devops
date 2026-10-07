@@ -75,7 +75,12 @@ json() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 
 # secret_values: the environment's secrets for environment.yaml, sealed for
 # the cluster's Sealed Secrets controller; without one they go to the cluster.
-secrets=$(sh "$scripts/app-secrets.sh" "$environment")
+database='{"enabled": false}' db_host=''
+if [ "${DATABASE_ENGINE:-}" = postgresql ]; then
+  database="{\"enabled\": true, \"image\": $(json "$DATABASE_IMAGE"), \"name\": $(json "$DATABASE_NAME")}"
+  db_host=$DEPLOY_NAME-db
+fi
+secrets=$(sh "$scripts/app-secrets.sh" "$environment" $db_host)
 secret_values=''
 if [ "$secrets" != '{}' ]; then
   jq=$(command -v jq 2> /dev/null || sh "$scripts/tool.sh" jq)
@@ -112,7 +117,8 @@ release() {
   "containerPort": ${DEPLOY_CONTAINER_PORT:-8080},
   "healthPath": $(json "${DEPLOY_HEALTH_PATH:-/actuator/health}"),
   "service": {"nodePort": $(json "$node_port")},
-  "canary": {"enabled": $canary}$secret_values
+  "canary": {"enabled": $canary},
+  "database": $database$secret_values
 }
 EOF
   git add --all

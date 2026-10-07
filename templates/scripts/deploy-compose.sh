@@ -40,14 +40,19 @@ printf '%s' "$DEPLOY_SSH_KEY_B64" | base64 -d > "$work/key"
 chmod 600 "$work/key"
 printf '%s' "${DEPLOY_KNOWN_HOSTS_B64:-}" | base64 -d > "$work/known_hosts"
 
-# The environment's secrets as a compose file, $ escaped from interpolation.
-secrets=$(sh "$(dirname "$0")/app-secrets.sh" "$environment")
+# The environment's secrets as a compose file, $ escaped from interpolation;
+# with the database module also the database's password.
+db_image=''
+[ "${DATABASE_ENGINE:-}" = postgresql ] && db_image=$DATABASE_IMAGE
+secrets=$(sh "$(dirname "$0")/app-secrets.sh" "$environment" ${db_image:+db})
 if [ "$secrets" = '{}' ]; then
   secrets_yml='services: {app: {environment: {}}}'
 else
   jq=$(command -v jq 2> /dev/null || sh "$(dirname "$0")/tool.sh" jq)
-  secrets_yml=$(printf '%s' "$secrets" | "$jq" -r '"services:\n  app:\n    environment:\n" +
-    (to_entries | map("      " + (.key | tojson) + ": " + (.value | gsub("\\$"; "$$") | tojson)) | join("\n"))')
+  secrets_yml=$(printf '%s' "$secrets" | "$jq" -r --arg db "$db_image" '
+    def yaml: to_entries | map("      " + (.key | tojson) + ": " + (.value | gsub("\\$"; "$$") | tojson)) | join("\n");
+    "services:\n  app:\n    environment:\n" + yaml
+    + if $db == "" then "" else "\n  db:\n    environment:\n" + ({POSTGRES_PASSWORD: .SPRING_DATASOURCE_PASSWORD} | yaml) end')
 fi
 
 # Single-quoted for the remote shell.
@@ -59,6 +64,7 @@ q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
     "$(q "$DEPLOY_NAME")" "$(q "$port")" "$(q "$DEPLOY_CONTAINER_PORT")"
   printf 'check=%s\n' "$(q "http://$DEPLOY_CHECK_HOST:$port$DEPLOY_HEALTH_PATH")"
   printf 'registry_user=%s registry_password=%s\n' "$(q "${IMAGE_REGISTRY_USERNAME:-}")" "$(q "${IMAGE_REGISTRY_PASSWORD:-}")"
+  printf 'db_image=%s db_name=%s\n' "$(q "$db_image")" "$(q "${DATABASE_NAME:-}")"
   printf 'secrets_b64=%s\n' "$(printf '%s\n' "$secrets_yml" | base64 | tr -d '\n')"
   cat <<'REMOTE'
 set -eu
@@ -92,6 +98,28 @@ services:
       - path: app.env
         required: false
 EOF
+# The environment's database, its data in a volume of the machine.
+if [ -n "$db_image" ]; then
+  cat >> compose.yml <<EOF
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: $db_image
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: $db_name
+      POSTGRES_USER: $db_name
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1", "-U", "$db_name", "-d", "$db_name"]
+      interval: 2s
+      retries: 60
+    volumes:
+      - db-data:/var/lib/postgresql
+volumes:
+  db-data:
+EOF
+fi
 (umask 077; printf '%s' "$secrets_b64" | base64 -d > secrets.yml)
 
 start() {

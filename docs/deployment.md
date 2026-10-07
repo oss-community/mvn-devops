@@ -5,7 +5,9 @@ registry, and later a running application. They are capabilities for your
 project; select the ones you want in `init`.
 
 The [hello-api example](../examples/hello-api) is a small web application
-with a health endpoint (`/actuator/health`) that the end-to-end tests deploy.
+with a health endpoint (`/actuator/health`) that the end-to-end tests deploy;
+[hello-data](../examples/hello-data) adds a PostgreSQL database with Flyway
+migrations.
 
 ## Container image
 
@@ -301,3 +303,45 @@ it. Seal secrets of your own the same way:
 kubectl create secret generic db --dry-run=client --output yaml --from-literal=password=... \
   | kubeseal --controller-namespace kube-system --format yaml > sealed-db.yaml
 ```
+
+## Database
+
+The `postgresql` module (*Database* category) gives the application a
+PostgreSQL database in each environment and checks its schema migrations
+before anything is deployed. The schema lives in Flyway migrations in the
+project (`src/main/resources/db/migration/V1__....sql`), and the application
+applies them when it starts, as Spring Boot does with `flyway-core` on the
+classpath.
+
+| Stage | Phase | What happens |
+|---|---|---|
+| `migrate` (35) | ci | empties the ci database and applies every migration from scratch with the Flyway Maven plugin, then validates them; a broken migration fails the build |
+
+Each deployment runs a PostgreSQL next to the application, its data kept
+across releases and rollbacks:
+
+| Deployment | The database |
+|---|---|
+| `docker-host` | a `db` container in the application's compose project on the machine, its data in a volume there |
+| `kubernetes`, `argocd` | a StatefulSet `<app>-db` with a persistent volume in the environment's namespace |
+
+The application gets `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and
+`SPRING_DATASOURCE_PASSWORD` with the environment's secrets, so a Spring Boot
+application needs no settings of its own. With Vault, the same names in the
+environment's secret win: set them there to use a managed database instead.
+When a release does not become healthy because a migration fails, the
+previous version runs on: PostgreSQL rolls the failed migration back.
+Write migrations the previous release can live with (add a column first,
+remove the old one a release later), because a rollback does not undo them.
+
+| Question | Default | Meaning |
+|---|---|---|
+| `DATABASE_NAME` | the image name, e.g. `hello_data` | database and user name in every environment |
+| `DATABASE_HOST_PORT` | 5433 | the ci database on this machine |
+| `FLYWAY_VERSION` | 12.4.0 | the Flyway version of the project, which Spring Boot manages (4.1: 12.4.0) |
+| `FLYWAY_LOCATIONS` | `filesystem:src/main/resources/db/migration` | where the migrations are |
+
+The passwords of the ci database and of each environment's database are
+generated (`devops.sh get DATABASE_PRODUCTION_PASSWORD`). A database keeps the
+password it was created with: after changing one, change it in the database
+too (`ALTER USER`).

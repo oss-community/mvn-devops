@@ -53,6 +53,12 @@ jobs:
             with: docker-registry,kubernetes,vault
           - orchestrator: jenkins
             with: docker-registry,argocd,vault,sealed-secrets
+          - orchestrator: maven
+            with: docker-registry,docker-host,postgresql
+          - orchestrator: jenkins
+            with: docker-registry,kubernetes,postgresql
+          - orchestrator: concourse
+            with: docker-registry,argocd,postgresql
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

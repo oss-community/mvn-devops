@@ -295,8 +295,25 @@ cmd_modules() {
   done
 }
 
+# Rewrites files with CRLF line endings to LF.  Done in Bash: Perl and other
+# tools on Windows may write CRLF again.
+fix_line_endings() {
+  local file line
+  while IFS= read -r file; do
+    {
+      while IFS= read -r line || [[ -n $line ]]; do printf '%s\n' "${line//$'\r'/}"; done < "$file"
+    } > "$file.lf" && cat "$file.lf" > "$file" && rm -f "$file.lf"
+    log_ok "LF: $file"
+  done
+}
+
 cmd_doctor() {
   local tool ok=1
+  if [[ ${1:-} == --fix ]]; then
+    grep -rlIU $'\r' --exclude='*.bat' --exclude='*.cmd' --exclude-dir=.git "$DEVOPS_HOME" 2>/dev/null | fix_line_endings
+    return 0
+  fi
+  [[ $# -eq 0 ]] || die "doctor: unknown option $1 (use --fix)"
   log_step "Checking tools"
   for tool in bash curl jq git java mvn docker ssh-keygen; do
     if command -v "$tool" > /dev/null; then
@@ -337,9 +354,8 @@ cmd_doctor() {
   if [[ -n $crlf ]]; then
     log_warn "Files with Windows (CRLF) line endings, which Bash cannot run:"
     printf '    %s\n' "${crlf//$'\n'/$'\n'    }"
-    # binmode: Perl on Windows would write CRLF again.
     log_warn "Fix them with:"
-    printf "    find '%s' -type f ! -name '*.bat' ! -name '*.cmd' ! -path '*/.git/*' -exec perl -pi -e '%s' {} +\n" "$DEVOPS_HOME" 'binmode ARGVOUT; s/\r$//'
+    printf '    %s/devops.sh doctor --fix\n' "$DEVOPS_HOME"
     ok=0
   else
     log_ok "line endings (LF)"

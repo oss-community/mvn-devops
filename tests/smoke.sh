@@ -127,7 +127,7 @@ grep -qU $'\r' "$crlf_dir/clone/mvn-devops/devops.bat" || fail "line endings: de
 perl -pi -e 's/\n/\r\n/' "$crlf_dir/clone/mvn-devops/templates/settings.xml"
 doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
 grep -q "CRLF" <<< "$doctor_out" || fail "line endings: doctor should report CRLF"
-eval "$(grep 'perl -pi' <<< "$doctor_out")"
+eval "$(grep 'doctor --fix' <<< "$doctor_out")" > /dev/null
 doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
 grep -q "line endings (LF)" <<< "$doctor_out" || fail "line endings: the fix doctor prints does not work:
 $doctor_out"

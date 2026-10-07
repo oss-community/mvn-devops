@@ -17,6 +17,7 @@ GitHub release.
 - An end-to-end test (`tests/e2e.sh`) that runs the real tools and the whole
   pipeline with each orchestrator on GitHub's runners.
 - The smoke test also runs on macOS and on Windows (Git Bash).
+- `doctor --fix` converts files with CRLF line endings to LF.
 - `docs/troubleshooting.md`, and documentation split into topic pages.
 
 ### Changed
@@ -34,7 +35,6 @@ GitHub release.
 
 - Docker on Windows got Git Bash paths in compose files and their `.env`.
 - `doctor` missed CRLF files on Windows, whose grep hides the CR.
-- The fix `doctor` prints for CRLF files wrote CRLF again with Perl on Windows.
 - Generating a password could hang on macOS where SIGPIPE is ignored.
 
 ## 1.0.0

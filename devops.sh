@@ -71,6 +71,7 @@ Operations
   get <KEY>    print one stored value (e.g. an admin password)
   modules      list available modules
   doctor       check prerequisites
+                 [--fix] convert files with CRLF line endings to LF
   upgrade      replace this copy of mvn-devops with the latest release
                  [--version X] [--check]
 

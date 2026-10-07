@@ -112,7 +112,7 @@ mvn-devops/devops.sh -y setup
 | `export-compose [dir]` | write one `docker-compose.yml` and its `.env` for the selected tools |
 | `env [--show\|--windows]` | regenerate env files; `--show` masks secrets; `--windows` writes a `setx` script for IDEs |
 | `get <KEY>` | print one stored value, e.g. `get SONAR_ADMIN_PASSWORD` |
-| `modules`, `doctor` | list modules, check prerequisites |
+| `modules`, `doctor [--fix]` | list modules, check prerequisites; `--fix` repairs CRLF line endings |
 | `upgrade [--version X] [--check]` | replace the copy of mvn-devops inside the project with a release |
 
 ## Documentation

@@ -23,15 +23,26 @@ module_secrets() {
   ask LOAD_TEST_MAX_ERROR_RATE "Highest share of failed requests" 0.01
 }
 
-# URL of staging as the pipeline reaches it.
+# URL of staging as the pipeline reaches it.  A pipeline in Docker reaches
+# the ports of this machine at the gateway of the tools' network: Concourse
+# tasks cannot resolve host.docker.internal.
 staging_url() {
-  local from=host
+  local address gateway
   if [[ -n $(value LOAD_TEST_URL) ]]; then
     value LOAD_TEST_URL
     return
   fi
-  [[ ${DEVOPS_RUNS_IN:-host} == docker ]] && from=docker
-  printf 'http://%s' "$(app_address staging "$from")"
+  if [[ ${DEVOPS_RUNS_IN:-host} != docker ]]; then
+    printf 'http://%s' "$(app_address staging host)"
+    return
+  fi
+  address=$(app_address staging docker)
+  if [[ $address == host.docker.internal:* ]]; then
+    gateway=$(docker network inspect "$(compose_project)_default" \
+      --format '{{range .IPAM.Config}}{{.Gateway}} {{end}}' 2> /dev/null | awk '{ print $1 }' || true)
+    [[ -n $gateway ]] && address=$gateway:${address##*:}
+  fi
+  printf 'http://%s' "$address"
 }
 
 module_env() {

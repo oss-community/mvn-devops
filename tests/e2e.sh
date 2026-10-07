@@ -256,7 +256,14 @@ if [[ ,$WITH, == *,prometheus,* ]]; then
     done
     [[ $up == 1 ]] || fail "Prometheus does not scrape $env: up=$up"
   done
-  requests=$(query 'sum(http_server_requests_seconds_count{job="app", environment="production", uri="/hello"})')
+  # A request to production, until a scrape of the running pods has it.
+  requests=''
+  for _ in $(seq 40); do
+    curl -fsS -o /dev/null "http://localhost:$prod_port/hello?name=metrics" || true
+    requests=$(query 'sum(http_server_requests_seconds_count{job="app", environment="production", uri="/hello"})')
+    [[ $requests =~ ^[1-9] ]] && break
+    sleep 3
+  done
   [[ $requests =~ ^[1-9] ]] || fail "Prometheus has no requests of production: $requests"
   printf 'ok  Prometheus scrapes staging and production (%s requests to production)\n' "$requests"
   grafana="http://admin:$(devops get GRAFANA_ADMIN_PASSWORD)@localhost:$(devops get GRAFANA_HOST_PORT)"

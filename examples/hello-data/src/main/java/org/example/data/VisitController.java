@@ -10,16 +10,20 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Greets the caller and records the visit in the database (table visit, see
  * db/migration); the environment name shows which deployment answered.
+ * The greeting is a setting of the environment (GREETING), kept as a secret.
  */
 @RestController
 public class VisitController {
 
   private final JdbcClient jdbc;
   private final String environment;
+  private final String greeting;
 
-  public VisitController(JdbcClient jdbc, @Value("${app.environment:local}") String environment) {
+  public VisitController(JdbcClient jdbc, @Value("${app.environment:local}") String environment,
+      @Value("${app.greeting:Hello}") String greeting) {
     this.jdbc = jdbc;
     this.environment = environment;
+    this.greeting = greeting;
   }
 
   /**
@@ -32,6 +36,6 @@ public class VisitController {
   public Map<String, Object> hello(@RequestParam(defaultValue = "world") String name) {
     jdbc.sql("insert into visit (name) values (?)").param(name).update();
     long visits = jdbc.sql("select count(*) from visit where name = ?").param(name).query(Long.class).single();
-    return Map.of("message", "Hello, " + name + "!", "visits", visits, "environment", environment);
+    return Map.of("message", greeting + ", " + name + "!", "visits", visits, "environment", environment);
   }
 }

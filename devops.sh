@@ -4,6 +4,13 @@
 (set -o igncr) 2>/dev/null && set -o igncr #
 set -euo pipefail
 
+# macOS ships Bash 3.2; the framework needs Bash 4 (mapfile and more).
+if (( BASH_VERSINFO[0] < 4 )); then
+  printf 'mvn-devops needs Bash 4 or newer, but %s is Bash %s.\n' "$BASH" "$BASH_VERSION" >&2
+  printf 'On macOS install it with "brew install bash" and open a new terminal.\n' >&2
+  exit 1
+fi
+
 # Follow symlinks, e.g. /usr/bin/mvn-devops -> /usr/share/mvn-devops/devops.sh.
 devops_source=${BASH_SOURCE[0]}
 while [[ -L $devops_source ]]; do

@@ -259,9 +259,9 @@ env_generate() {
     } > "$DEVOPS_ENV/pipeline.sh"
 
     {
-      printf 'DEVOPS_HOME=%s\n' "$DEVOPS_HOME"
-      printf 'DEVOPS_STATE=%s\n' "$DEVOPS_STATE"
-      printf 'PROJECT_DIR=%s\n' "$PROJECT_DIR"
+      printf 'DEVOPS_HOME=%s\n' "$(native_path "$DEVOPS_HOME")"
+      printf 'DEVOPS_STATE=%s\n' "$(native_path "$DEVOPS_STATE")"
+      printf 'PROJECT_DIR=%s\n' "$(native_path "$PROJECT_DIR")"
       printf 'PROJECT_NAME=%s\n' "$PROJECT_NAME"
       for file in "$DEVOPS_VALUES"/*; do
         [[ -f $file ]] || continue

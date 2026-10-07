@@ -59,6 +59,12 @@ jobs:
             with: docker-registry,kubernetes,postgresql
           - orchestrator: concourse
             with: docker-registry,argocd,postgresql
+          - orchestrator: maven
+            with: docker-registry,docker-host,prometheus,loki
+          - orchestrator: jenkins
+            with: docker-registry,docker-host,vault,prometheus,loki
+          - orchestrator: concourse
+            with: docker-registry,kubernetes,prometheus,loki
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

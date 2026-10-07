@@ -127,4 +127,25 @@ doctor_out=$("$crlf_dir/clone/mvn-devops/devops.sh" doctor 2>&1 || true)
 grep -q "CRLF" <<< "$doctor_out" || fail "line endings: doctor should report CRLF"
 printf 'ok  line endings\n'
 
+# upgrade: a copy inside a project is replaced by a checked release.
+if command -v zip > /dev/null; then
+  releases="$WORK/releases/download/v9.9.9"
+  mkdir -p "$releases"
+  NFPM=true DIST="$WORK/dist" "$ROOT/packaging/build.sh" 9.9.9 > /dev/null
+  cp "$WORK/dist/mvn-devops-9.9.9.tar.gz" "$WORK/dist/SHA256SUMS" "$releases/"
+  copy="$WORK/app/mvn-devops"
+  mkdir -p "$copy"
+  cp -R "$ROOT"/{devops.sh,lib,modules,templates,VERSION} "$copy/"
+  touch "$copy/lib/removed-in-new-release.sh"
+  DEVOPS_RELEASES_URL="file://$WORK/releases" "$copy/devops.sh" upgrade --version 9.9.9 > /dev/null
+  [[ $(cat "$copy/VERSION") == 9.9.9 ]] || fail "upgrade: VERSION not replaced"
+  [[ ! -e "$copy/lib/removed-in-new-release.sh" ]] || fail "upgrade: old files left behind"
+  printf 'x' >> "$releases/mvn-devops-9.9.9.tar.gz"
+  printf '1.0.0' > "$copy/VERSION"
+  ! DEVOPS_RELEASES_URL="file://$WORK/releases" "$copy/devops.sh" upgrade --version 9.9.9 > /dev/null 2>&1 \
+    || fail "upgrade: a bad checksum must fail"
+  [[ $(cat "$copy/VERSION") == 1.0.0 ]] || fail "upgrade: changed files despite a bad checksum"
+  printf 'ok  upgrade\n'
+fi
+
 printf 'All smoke tests passed\n'

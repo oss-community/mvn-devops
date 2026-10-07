@@ -106,9 +106,11 @@ Commit `devops.conf` too. Everyone else clones the project and runs
 `mvn-devops/devops.sh setup`: the tools and answers come from `devops.conf`, so
 they are only asked for their own passwords, tokens and user names.
 
-**Upgrade** by deleting the `mvn-devops` folder, extracting the new zip the
-same way and committing. `mvn-devops/devops.sh --version` shows the version in
-use.
+**Upgrade** with `mvn-devops/devops.sh upgrade`: it downloads the latest
+release, checks it against `SHA256SUMS` and replaces the folder; review the
+change with `git status` and commit it. `upgrade --check` only compares
+versions, `upgrade --version X` picks a release, and `--version` shows the
+version in use.
 
 Notes:
 
@@ -186,6 +188,7 @@ Without questions, for scripts and CI:
 | `env [--show\|--windows]` | regenerate env files; `--show` masks secrets; `--windows` writes a `setx` script for IDEs on Windows |
 | `get <KEY>` | print one stored value, e.g. `get SONAR_ADMIN_PASSWORD` |
 | `modules`, `doctor` | list modules, check prerequisites |
+| `upgrade [--version X] [--check]` | replace the copy of mvn-devops inside a project with a release |
 
 ## Modules
 

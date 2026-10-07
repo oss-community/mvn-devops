@@ -39,6 +39,8 @@ source "$DEVOPS_HOME/lib/docker.sh"
 source "$DEVOPS_HOME/lib/commands.sh"
 # shellcheck source=lib/release.sh
 source "$DEVOPS_HOME/lib/release.sh"
+# shellcheck source=lib/upgrade.sh
+source "$DEVOPS_HOME/lib/upgrade.sh"
 
 usage() {
   cat <<EOF
@@ -69,6 +71,8 @@ Operations
   get <KEY>    print one stored value (e.g. an admin password)
   modules      list available modules
   doctor       check prerequisites
+  upgrade      replace this copy of mvn-devops with the latest release
+                 [--version X] [--check]
 
 Options
   -p, --project <dir>   Maven project directory (default: current directory)
@@ -99,7 +103,7 @@ main() {
 
   local command=$1; shift
   case $command in
-    init|setup|secrets|up|configure|publish|stages|render|run|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release)
+    init|setup|secrets|up|configure|publish|stages|render|run|status|urls|logs|down|destroy|compose|env|get|modules|doctor|release|upgrade)
       "cmd_$command" "$@" ;;
     export-compose) cmd_export_compose "$@" ;;
     help) usage ;;

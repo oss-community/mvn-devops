@@ -12,7 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION=${1:-$(cat "$ROOT/VERSION")}
 VERSION=${VERSION#v}
-DIST="$ROOT/dist"
+DIST=${DIST:-"$ROOT/dist"}
 NFPM=${NFPM:-nfpm}
 name="mvn-devops-$VERSION"
 

@@ -22,7 +22,7 @@ state_init_paths() {
   DEVOPS_GENERATED="$DEVOPS_STATE/generated"
   DEVOPS_KEYS="$DEVOPS_STATE/keys"
   DEVOPS_CONF="$PROJECT_DIR/devops.conf"
-  # Selection file of mvn-devops 1.0.0, moved to devops.conf on first use.
+  # Selection file of early copies of mvn-devops, moved to devops.conf on first use.
   DEVOPS_PROFILE="$DEVOPS_STATE/profile.conf"
   export DEVOPS_STATE DEVOPS_VALUES DEVOPS_ENV DEVOPS_GENERATED DEVOPS_KEYS DEVOPS_CONF DEVOPS_PROFILE
 }

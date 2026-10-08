@@ -3,132 +3,66 @@
 Every release of mvn-devops. The section of a version is also the text of its
 GitHub release.
 
-## Unreleased
-
-### Added
-
-- `devops.conf` in the project root holds the selected tools and every answer
-  that is neither secret nor personal. Commit it: a teammate's `setup` asks only
-  for their own passwords, tokens and user names. A `.devops/profile.conf` from
-  1.0.0 is moved there on first use.
-- `devops.sh upgrade` replaces the copy of mvn-devops inside a project with a
-  release, checked against `SHA256SUMS`.
-- `examples/hello-maven`, a sample project.
-- An end-to-end test (`tests/e2e.sh`) that runs the real tools and the whole
-  pipeline with each orchestrator on GitHub's runners.
-- The smoke test also runs on macOS and on Windows (Git Bash).
-- `doctor --fix` converts files with CRLF line endings to LF.
-- `docs/troubleshooting.md`, and documentation split into topic pages.
-- Container images: an `image` stage builds the application with Jib (no
-  Docker or Dockerfile needed, so it works in Jenkins and Concourse too), or
-  with the project's Dockerfile, and pushes it tagged with the commit and
-  `latest`. The registry is the Distribution registry in Docker, an existing
-  registry (Docker Hub, Harbor, Nexus, Artifactory) or the GitHub Container
-  Registry. See `docs/deployment.md`.
-- `examples/hello-api`, a small Spring Boot web application with a health
-  endpoint, used by the deployment tests.
-- Stages can call scripts from `templates/scripts/` through `$DEVOPS_SCRIPTS`.
-- Deployment environments of the project's own: `ENVIRONMENTS` in
-  `devops.conf` lists them in order (e.g. `dev test staging prod`; default
-  `staging production`), and `ENV_<NAME>_APPROVAL` says which ones wait for
-  approval (by default the last). Every deployment module, the database,
-  monitoring, the load test and the orchestrators work with any number of
-  environments; Jenkins and Concourse get one approval per environment that
-  needs it. Stage phases are `ci`, `cd` or an environment's name, and
-  `prod` stands for the last environment.
-- Ready-made pipelines in `pipelines/`: tested combinations of tools with
-  their settings, e.g. `jenkins-sonarqube-nexus` or `jenkins-kubernetes`.
-  `devops.sh pipelines` lists them and `setup --pipeline <name or file>`
-  sets one up, asking only for what cannot be generated (the GitHub user and
-  token, the Nexus licence). See `docs/pipelines.md`.
-- More ready-made pipelines (16 in all), from Maven with SonarQube and Nexus
-  up to Jenkins with every kind of tool, e.g. `jenkins-sonarqube-nexus-argocd`,
-  `concourse-kubernetes-vault` and `jenkins-complete`.
-- The `maven-container` orchestrator: the stages run with `mvn` in a container
-  on the Docker machine, this one or another one, from a fresh checkout of
-  GitHub. See `docs/orchestrators.md`.
-- `docs/getting-started.md`: step-by-step guides, one command per step.
-- Deployment to a machine (`docker-host`): Docker Compose over SSH, to staging
-  in the cd phase and to production after an approval. Each deployment is
-  checked at the application's health endpoint and the previous image is put
-  back when the check fails. Without a machine, a simulated one runs in Docker.
-- A `prod` phase for stages that wait for an approval: `run --phase prod` with
-  every orchestrator, an `input` step in Jenkins, a manual `prod` job in
-  Concourse.
-- `devops.sh rollback [staging|production] [--to TAG]`.
-- Categories can be `optional`: at most one module, or none.
-- Image security: Trivy scans the pushed image and fails on fixable
-  vulnerabilities of `TRIVY_FAIL_ON` (default CRITICAL), Syft writes its SBOM
-  (SPDX and CycloneDX), Cosign signs it with a project key, attests the SBOM
-  and checks the signature before production. Signatures stay in the
-  registry; the public Sigstore services are not used.
-- Deployment to Kubernetes (`kubernetes`) with Helm 4: rolling updates that
-  wait for the readiness probe and roll back on failure, staging and
-  production namespaces, `rollback` through Helm's history. The cluster is an
-  existing one (kubeconfig) or k3s in Docker. A generic chart
-  (`templates/helm/app`) is used unless the project has its own.
-- GitOps with Argo CD (`argocd`): the pipeline commits the chart and the
-  release of each environment to a `gitops` branch and waits until Argo CD
-  has synced it and the application is healthy; a release that does not
-  become healthy is reverted in git. Production is released as a canary with
-  Argo Rollouts. `configure` installs both in the cluster.
-- Secrets (`vault`, `sealed-secrets`): the deploy stage reads the secrets of
-  its environment from Vault and passes them to the application as
-  environment variables, on the machine, as a Kubernetes Secret, or with
-  Argo CD as a SealedSecret in the GitOps branch. Vault in Docker is
-  initialised and unsealed by `configure`; the pipeline gets a read-only,
-  renewed token. `configure` installs the Sealed Secrets controller.
-- A database (`postgresql`): each environment gets its own PostgreSQL next to
-  the application (a container on the machine, a StatefulSet on Kubernetes)
-  and the application its connection as `SPRING_DATASOURCE_*`. A `migrate`
-  stage applies the Flyway migrations to an empty database in the ci phase.
-  `examples/hello-data` is a sample application with a database.
-- Monitoring (`prometheus`, `loki`): Prometheus scrapes the application in
-  each environment and alerts when it is down or fails requests; Grafana
-  shows a dashboard of the application and searches its logs, which Grafana
-  Alloy collects into Loki from the simulated machine and from k3s.
-- Load test (`k6`): k6 load tests staging after each deployment and stops
-  the release when responses are too slow or fail; the project's own k6
-  script or a generic one, with its results in Prometheus when that module is
-  selected.
-- `tests/git-server.py`, a git server for the end-to-end test that accepts
-  pushes.
-- `templates/scripts/tool.sh` downloads pinned tools (Trivy 0.75.0, Syft
-  1.54.1, Cosign 3.1.3, Helm 4.3.0, kubectl 1.37.1, kubeseal 0.40.0, jq
-  1.8.1, k6 2.3.0) where the pipeline runs, checked against their release
-  checksums and cached in `~/.cache/mvn-devops/tools`.
-
-### Changed
-
-- `run` with the maven orchestrator no longer runs production stages; the
-  Concourse `ci` job builds the latest commit.
-- Java 21 and Maven 3.9 everywhere (Jenkins image, Concourse tasks, `doctor`).
-- SonarQube Community Build 26.9 instead of the frozen `lts-community` (9.9)
-  tag, PostgreSQL 18, and the latest stable Maven plugins (sonar 5.8.0.7211,
-  javadoc 3.12.0, site 3.22.0, source 3.4.0, deploy 3.2.0, versions 2.22.0,
-  help 3.5.2).
-- The scripts keep LF line endings on Windows checkouts (`.gitattributes`),
-  and `doctor` reports files that are CRLF.
-- devops.sh stops with a clear message on Bash older than 4.
-
-### Fixed
-
-- Docker on Windows got Git Bash paths in compose files and their `.env`.
-- `doctor` missed CRLF files on Windows, whose grep hides the CR.
-- On Windows (Bash with igncr) `doctor` reported every file as CRLF, because igncr
-  also drops the CR from `$'\r'` in the scripts.
-- Generating a password could hang on macOS where SIGPIPE is ignored.
-
 ## 1.0.0
 
 First release.
 
-- Modules for GitHub, Maven, SonarQube, Nexus, Artifactory OSS, GitHub
-  Packages and GitHub Pages; orchestrators maven (local), Jenkins
-  (configuration as code) and Concourse.
-- Every tool runs in Docker, on this machine or another one, or is an
-  existing server with its own URL; GitHub Enterprise is supported.
-- No profiles in the project's pom: plugins are called by their coordinates.
-- `export-compose` writes the selected tools as one docker-compose.yml.
+### Setup
+
+- A menu of modules per category: GitHub; Maven; SonarQube; Nexus,
+  Artifactory OSS and GitHub Packages; GitHub Pages; container images; image
+  security; deployment; GitOps; secrets; a database; monitoring; a load test.
+- Orchestrators: `maven` (on this machine), `maven-container` (in a container
+  on the Docker machine, from a fresh checkout of GitHub), Jenkins
+  (configuration as code, no setup wizard) and Concourse.
+- `setup` asks the questions, starts the tools in Docker, replaces their
+  default passwords, creates tokens and repositories, and installs the
+  pipeline. Every tool runs in Docker, on this machine or another one, or is
+  an existing server with its own URL; GitHub Enterprise is supported.
+- `devops.conf` in the project root holds the selected tools and every answer
+  that is neither secret nor personal. Commit it: a teammate's `setup` asks
+  only for their own tokens and user names. Passwords and keys stay in
+  `.devops/`.
+- 16 ready-made pipelines in `pipelines/`, from Maven with SonarQube and Nexus
+  up to Jenkins with every kind of tool. `setup --pipeline <name or file>`
+  sets one up and generates new passwords, tokens and keys for each project.
+- No profiles, plugins or `distributionManagement` in the project's pom:
+  plugins are called by their coordinates.
+
+### Pipeline
+
+- Container images built with Jib (no Docker or Dockerfile needed) or with
+  the project's Dockerfile, pushed to a registry in Docker, an existing one or
+  the GitHub Container Registry.
+- Image security: Trivy scans the image, Syft writes its SBOM, Cosign signs
+  it and checks the signature before an approved environment gets it.
+- Deployment environments of the project's own (`ENVIRONMENTS`, e.g.
+  `dev test staging prod`), each with its own machine or namespace, port,
+  secrets and database, and an approval where `ENV_<NAME>_APPROVAL=yes`. The
+  same image goes through them in order.
+- Deployment with Docker Compose over SSH, with Helm on Kubernetes (an
+  existing cluster or k3s in Docker), or with Argo CD from a GitOps branch,
+  the last environment as a canary with Argo Rollouts. Each deployment is
+  checked and rolled back when it fails; `rollback` puts the previous image
+  back.
+- Secrets from Vault, passed to the application as environment variables, a
+  Kubernetes Secret or a SealedSecret.
+- PostgreSQL per environment, with the Flyway migrations checked against an
+  empty database in ci.
+- Prometheus, Grafana and Loki watch each environment; k6 load tests one of
+  them after each deployment.
 - `release` releases the project without maven-release-plugin.
-- Packages: zip, tar.gz, deb and rpm.
+
+### Tools and packaging
+
+- `doctor` checks the prerequisites; `doctor --fix` repairs CRLF line endings.
+- `upgrade` replaces the copy of mvn-devops inside a project with a release,
+  checked against `SHA256SUMS`.
+- `export-compose` writes the selected tools as one docker-compose.yml.
+- Packages: zip, tar.gz, deb and rpm. Runs on Linux, macOS and Windows (Git
+  Bash).
+- `docs/getting-started.md` has step-by-step guides; `examples/` has sample
+  projects.
+- Tested on every push: a smoke test on Linux, macOS and Windows, and an
+  end-to-end test of every orchestrator and the ready-made pipelines with the real
+  tools on GitHub's runners.

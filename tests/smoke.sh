@@ -97,7 +97,7 @@ devops secrets > /dev/null
 [[ $(devops get NEXUS_HOST_PORT) == 9184 ]] || fail "devops.conf: answer not used on a fresh clone"
 env_out=$(devops env --show)
 grep -q '^NEXUS_ARTIFACTORY_HOST_URL=http://localhost:9184$' <<< "$env_out" || fail "devops.conf: answer not in the pipeline"
-# A project set up with 1.0.0 keeps working: profile.conf moves to devops.conf.
+# A project set up before devops.conf keeps working: profile.conf moves there.
 rm -f "$conf"
 printf "PROJECT_NAME=demo-app\nORCHESTRATOR=maven\nMODULES='scm/github build/maven orchestrator/maven'\n" > "$project/.devops/profile.conf"
 devops stages > /dev/null

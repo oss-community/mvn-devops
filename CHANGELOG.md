@@ -66,5 +66,5 @@ First release.
 - `docs/getting-started.md` has step-by-step guides; `examples/` has sample
   projects.
 - Tested on every push: a smoke test on Linux, macOS and Windows, and an
-  end-to-end test of every orchestrator and the ready-made pipelines with the real
-  tools on GitHub's runners.
+  end-to-end test of the three complete pipelines with the real tools on
+  GitHub's runners.

@@ -1,7 +1,9 @@
 name: e2e
 
-# Starts the real tools in Docker, runs the pipeline of an example project
-# (examples/hello-maven, or hello-api for deployments) with each orchestrator and checks the results in the tools (tests/e2e.sh).
+# Starts the real tools in Docker, runs the whole pipeline of an example
+# project with each complete ready-made pipeline (pipelines/*-complete.conf)
+# and checks the results in the tools (tests/e2e.sh).  tests/e2e.sh also runs
+# any other combination by hand.
 on:
   push:
     branches: [main]
@@ -20,117 +22,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - orchestrator: maven
-            with: sonarqube,nexus
-          # Setup only: Artifactory OSS repositories need its Quick Setup wizard.
-          - orchestrator: maven
-            with: jfrog
-          - orchestrator: jenkins
-            with: sonarqube,nexus
-          - orchestrator: concourse
-            with: sonarqube,nexus
-          - orchestrator: maven
-            with: docker-registry,docker-host,trivy,syft,cosign
-          - orchestrator: jenkins
-            with: docker-registry,docker-host,trivy,syft,cosign
-          - orchestrator: concourse
-            with: docker-registry,docker-host,trivy,syft,cosign
-          - orchestrator: maven
-            with: docker-registry,kubernetes
-          - orchestrator: jenkins
-            with: docker-registry,kubernetes
-          - orchestrator: concourse
-            with: docker-registry,kubernetes
-          - orchestrator: maven
-            with: docker-registry,argocd
-          - orchestrator: jenkins
-            with: docker-registry,argocd
-          - orchestrator: concourse
-            with: docker-registry,argocd
-          - orchestrator: maven
-            with: docker-registry,docker-host,vault
-          - orchestrator: concourse
-            with: docker-registry,kubernetes,vault
-          - orchestrator: jenkins
-            with: docker-registry,argocd,vault,sealed-secrets
-          - orchestrator: maven
-            with: docker-registry,docker-host,postgresql
-          - orchestrator: jenkins
-            with: docker-registry,kubernetes,postgresql
-          - orchestrator: concourse
-            with: docker-registry,argocd,postgresql
-          - orchestrator: maven
-            with: docker-registry,docker-host,prometheus,loki
-          - orchestrator: jenkins
-            with: docker-registry,docker-host,vault,prometheus,loki
-          - orchestrator: concourse
-            with: docker-registry,kubernetes,prometheus,loki
-          - orchestrator: maven
-            with: docker-registry,docker-host,k6,prometheus
-          - orchestrator: jenkins
-            with: docker-registry,kubernetes,k6
-          - orchestrator: concourse
-            with: docker-registry,docker-host,k6
-          # Environments of the project's own, with one or two approvals.
-          - orchestrator: maven
-            with: docker-registry,docker-host,postgresql
-            environments: dev test staging prod
-            approvals: staging prod
-          - orchestrator: jenkins
-            with: docker-registry,kubernetes,k6,prometheus
-            environments: dev test staging prod
-            approvals: staging prod
-          - orchestrator: concourse
-            with: docker-registry,docker-host,cosign
-            environments: dev test staging prod
-            approvals: staging prod
-          - orchestrator: maven
-            with: docker-registry,argocd
-            environments: dev test staging prod
-          # Maven in a container on the Docker machine, from a checkout of the repository.
-          - orchestrator: maven-container
-            with: sonarqube,nexus
-          - orchestrator: maven-container
-            with: docker-registry,docker-host,postgresql
-            environments: dev test staging prod
-            approvals: staging prod
-          - orchestrator: maven-container
-            with: docker-registry,argocd
-          # Larger combinations of tools.
-          - orchestrator: maven
-            with: docker-registry,docker-host
-            environments: dev test staging prod
-          - orchestrator: maven
-            with: docker-registry,kubernetes
-            environments: dev test staging prod
-          - orchestrator: maven-container
-            with: docker-registry,kubernetes,postgresql,trivy
-            environments: dev staging prod
-          - orchestrator: jenkins
-            with: sonarqube,nexus,docker-registry,kubernetes,trivy,syft,cosign
-            environments: dev test staging prod
-          - orchestrator: jenkins
-            with: sonarqube,nexus,docker-registry,argocd
-            environments: dev test staging prod
-          - orchestrator: jenkins
-            with: docker-registry,argocd,prometheus,loki,k6
-            environments: dev test staging prod
-          - orchestrator: jenkins
-            with: docker-registry,docker-host,postgresql,prometheus,loki,k6
-            environments: dev test staging prod
-          - orchestrator: concourse
-            with: sonarqube,docker-registry,kubernetes,vault,postgresql
-            environments: dev test staging prod
-            approvals: staging prod
-          - orchestrator: concourse
-            with: docker-registry,docker-host,trivy,syft,cosign,postgresql
-            environments: dev staging prod
-          - orchestrator: concourse
-            with: docker-registry,argocd,vault,sealed-secrets
-            environments: dev test staging prod
-          # Ready-made pipelines (pipelines/).
-          - orchestrator: pipeline
-            with: maven-basic
           - orchestrator: pipeline
             with: maven-complete
           - orchestrator: pipeline

@@ -36,8 +36,8 @@ and Loki, and k6. They deploy to `dev`, `test`, `staging` and `prod`; only
 the orchestrator. Every tool runs at once, so give Docker plenty of memory.
 
 For any other combination, pick the tools from the menu (`init`) or write a
-pipeline of your own (below). The end-to-end test runs the four pipelines
-and many other combinations on GitHub's runners.
+pipeline of your own (below). The end-to-end test runs the three complete
+pipelines on GitHub's runners.
 
 Step by step: [getting-started.md](getting-started.md#guide-1-a-ready-made-pipeline).
 

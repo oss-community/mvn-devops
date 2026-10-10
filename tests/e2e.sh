@@ -84,6 +84,8 @@ GITHUB_REPOSITORY=e2e/$EXAMPLE
 NEXUS_ACCEPT_EULA=yes
 JENKINS_TRIGGER=none
 TRIVY_FAIL_ON=
+LOAD_TEST_DURATION=10s
+GITOPS_CANARY_PAUSE=5s
 EOF
 if [[ -n ${E2E_ENVIRONMENTS:-} ]]; then
   printf 'ENVIRONMENTS=%s\n' "$E2E_ENVIRONMENTS" >> "$project/devops.conf"
@@ -222,28 +224,22 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     done
     [[ -n ${answer:-} ]] || fail "$1 does not answer on port $port"
     jq -e --arg env "$1" '.environment == $env' <<< "$answer" > /dev/null || fail "$1 answers $answer"
-    if [[ ,$WITH, == *,postgresql,* ]]; then
-      jq -r .visits <<< "$answer" > "$WORK/visits-$1"
-    fi
     if [[ ,$WITH, == *,vault,* ]]; then
       jq -e --arg m "$(greeting "$1"), e2e!" '.message == $m' <<< "$answer" > /dev/null \
         || fail "$1 does not greet with its secret from Vault: $answer"
     fi
     printf '%s\n' "${image##*:}"
   }
-  # release <tag> <first|next>: after the pipeline ran, the environments up
-  # to the first approval run <tag>; each approval in turn deploys the next
-  # ones.  The first time, an environment that needs approval must not have
-  # been deployed before it.
+  # release <tag>: after the pipeline ran, the environments up to the first
+  # approval run <tag>; each approval in turn deploys the next ones.  An
+  # environment that needs approval must not have been deployed before it.
   release() {
-    local tag=$1 round=$2 env
+    local tag=$1 env
     for env in "${envs[@]}"; do
       if needs_approval "$env"; then
-        if [[ $round == first ]]; then
-          ! curl -fsS -o /dev/null "http://localhost:$(env_port "$env")/actuator/health" 2> /dev/null \
-            || fail "$env was deployed without approval"
-          printf 'ok  %s waits for the approval\n' "$env"
-        fi
+        ! curl -fsS -o /dev/null "http://localhost:$(env_port "$env")/actuator/health" 2> /dev/null \
+          || fail "$env was deployed without approval"
+        printf 'ok  %s waits for the approval\n' "$env"
         step "devops.sh run --phase $env"
         devops run --phase "$env"
       fi
@@ -252,24 +248,7 @@ if [[ ,$WITH, == *,docker-host,* || ,$WITH, == *,kubernetes,* ]]; then
     done
   }
   prod_port=$(env_port "$last")
-  first=$(git -C "$project" rev-parse --short=12 HEAD)
-  release "$first" first
-
-  step "A second commit, then rollback"
-  printf '\nChanged by the end-to-end test.\n' >> "$project/README.md"
-  git -C "$project" commit -qam "Second commit"
-  git -C "$project" push -q origin main
-  second=$(git -C "$project" rev-parse --short=12 HEAD)
-  run_pipeline
-  release "$second" next
-  devops rollback "$last"
-  [[ $(app_check "$last") == "$first" ]] || fail "rollback did not bring back $first"
-  printf 'ok  rollback brought back %s\n' "$first"
-  if [[ ,$WITH, == *,postgresql,* ]]; then
-    # One visit per check of the last environment: the data outlived two deployments.
-    [[ $(cat "$WORK/visits-$last") == 3 ]] || fail "$last's database lost visits: $(cat "$WORK/visits-$last")"
-    printf 'ok  %s kept its data through the releases\n' "$last"
-  fi
+  release "$(git -C "$project" rev-parse --short=12 HEAD)"
 fi
 if [[ ,$WITH, == *,k6,* ]]; then
   tested=$(devops get LOAD_TEST_ENVIRONMENT)

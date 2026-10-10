@@ -4,14 +4,12 @@ name: e2e
 # project with each complete ready-made pipeline (pipelines/*-complete.conf)
 # and checks the results in the tools (tests/e2e.sh).  tests/e2e.sh also runs
 # any other combination by hand.
+# Every night at 00:30 UTC (04:00 in Tehran), and by hand (Actions > e2e >
+# Run workflow); the smoke test (ci.yml) runs on every push.
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
   schedule:
-    # Weekly, to catch changes in the tools' latest images.
-    - cron: '0 3 * * 1'
+    - cron: '30 0 * * *'
 
 jobs:
   e2e:
@@ -40,5 +38,5 @@ jobs:
       - name: tests/e2e.sh ${{ matrix.orchestrator }} ${{ matrix.with }}
         run: tests/e2e.sh ${{ matrix.orchestrator }} ${{ matrix.with }}
         env:
-          E2E_ENVIRONMENTS: ${{ matrix.environments }}
-          E2E_APPROVALS: ${{ matrix.approvals }}
+          # Two environments: one deployed by the pipeline, one after the approval.
+          E2E_ENVIRONMENTS: staging prod

@@ -266,6 +266,7 @@ fails. `devops.sh rollback` is such a commit too.
 |---|---|---|
 | `GITOPS_BRANCH` | `gitops` | branch of the project's repository with the desired state; created by the first release |
 | `GITOPS_CANARY` | `yes` | the last environment as a canary with Argo Rollouts |
+| `GITOPS_CANARY_PAUSE` | `30s` | pause of the canary at 25% and at 50% of the pods |
 | `ARGOCD_HOST_PORT` | 8443 | k3s: Argo CD's web console on this machine (`admin`, `devops.sh get ARGOCD_ADMIN_PASSWORD`) |
 
 `configure` installs Argo CD and Argo Rollouts from their release manifests,

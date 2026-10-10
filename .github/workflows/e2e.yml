@@ -4,12 +4,12 @@ name: e2e
 # project with each complete ready-made pipeline (pipelines/*-complete.conf)
 # and checks the results in the tools (tests/e2e.sh).  tests/e2e.sh also runs
 # any other combination by hand.
-# Every night at 00:30 UTC (04:00 in Tehran), and by hand (Actions > e2e >
-# Run workflow); the smoke test (ci.yml) runs on every push.
+# Every night at 04:00 UTC, and by hand (Actions > e2e > Run workflow); the
+# smoke test (ci.yml) runs on every push.
 on:
   workflow_dispatch:
   schedule:
-    - cron: '30 0 * * *'
+    - cron: '0 4 * * *'
 
 jobs:
   e2e:

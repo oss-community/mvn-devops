@@ -363,8 +363,9 @@ done
 # Without -y only what has no default is asked: the GitHub token and the
 # Nexus licence; the rest, passwords included, is taken or generated.  The
 # GitHub user is given, as git config may not know it.
+printf '# SonarQube and Nexus.\nORCHESTRATOR=maven\nTOOLS=sonarqube,nexus\n' > "$WORK/sonarqube-nexus.conf"
 rm -rf "$project/.devops" "$project/devops.conf"
-devops init --pipeline maven-sonarqube-nexus > /dev/null
+devops init --pipeline "$WORK/sonarqube-nexus.conf" > /dev/null
 mkdir -p "$project/.devops/values"
 printf 'demo' > "$project/.devops/values/GITHUB_USERNAME"
 printf 'demo@example.com' > "$project/.devops/values/GITHUB_EMAIL"

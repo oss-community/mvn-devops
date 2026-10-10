@@ -6,7 +6,7 @@
 shellcheck devops.sh lib/*.sh modules/*/*/module.sh tests/*.sh packaging/*.sh
 tests/smoke.sh                       # no Docker needed: init, secrets, stages, render, devops.conf, upgrade
 tests/e2e.sh maven sonarqube,nexus   # real tools in Docker: setup, the whole pipeline, results in the tools
-tests/e2e.sh pipeline maven-docker-host            # a ready-made pipeline
+tests/e2e.sh pipeline maven-basic   # a ready-made pipeline
 E2E_ENVIRONMENTS="dev test staging prod" E2E_APPROVALS="staging prod" \
   tests/e2e.sh maven docker-registry,docker-host   # environments of your own
 ```

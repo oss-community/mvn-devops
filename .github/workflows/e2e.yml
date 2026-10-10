@@ -96,33 +96,47 @@ jobs:
             approvals: staging prod
           - orchestrator: maven-container
             with: docker-registry,argocd
+          # Larger combinations of tools.
+          - orchestrator: maven
+            with: docker-registry,docker-host
+            environments: dev test staging prod
+          - orchestrator: maven
+            with: docker-registry,kubernetes
+            environments: dev test staging prod
+          - orchestrator: maven-container
+            with: docker-registry,kubernetes,postgresql,trivy
+            environments: dev staging prod
+          - orchestrator: jenkins
+            with: sonarqube,nexus,docker-registry,kubernetes,trivy,syft,cosign
+            environments: dev test staging prod
+          - orchestrator: jenkins
+            with: sonarqube,nexus,docker-registry,argocd
+            environments: dev test staging prod
+          - orchestrator: jenkins
+            with: docker-registry,argocd,prometheus,loki,k6
+            environments: dev test staging prod
+          - orchestrator: jenkins
+            with: docker-registry,docker-host,postgresql,prometheus,loki,k6
+            environments: dev test staging prod
+          - orchestrator: concourse
+            with: sonarqube,docker-registry,kubernetes,vault,postgresql
+            environments: dev test staging prod
+            approvals: staging prod
+          - orchestrator: concourse
+            with: docker-registry,docker-host,trivy,syft,cosign,postgresql
+            environments: dev staging prod
+          - orchestrator: concourse
+            with: docker-registry,argocd,vault,sealed-secrets
+            environments: dev test staging prod
           # Ready-made pipelines (pipelines/).
           - orchestrator: pipeline
-            with: maven-docker-host
+            with: maven-basic
           - orchestrator: pipeline
-            with: jenkins-kubernetes
-          - orchestrator: pipeline
-            with: concourse-sonarqube-nexus
-          - orchestrator: pipeline
-            with: jenkins-sonarqube-nexus-argocd
-          - orchestrator: pipeline
-            with: maven-container-kubernetes
-          - orchestrator: pipeline
-            with: maven-kubernetes
-          - orchestrator: pipeline
-            with: concourse-kubernetes-vault
-          - orchestrator: pipeline
-            with: jenkins-argocd-observability
-          - orchestrator: pipeline
-            with: concourse-docker-host-secure
+            with: maven-complete
           - orchestrator: pipeline
             with: jenkins-complete
           - orchestrator: pipeline
-            with: jenkins-observability
-          - orchestrator: pipeline
-            with: concourse-argocd
-          - orchestrator: pipeline
-            with: maven-container-sonarqube-nexus
+            with: concourse-complete
     steps:
       - uses: actions/checkout@v4
       - name: free disk space

@@ -38,7 +38,7 @@ mvn-devops/devops.sh pipelines
 Step 2. Set one up:
 
 ```bash
-mvn-devops/devops.sh setup --pipeline jenkins-sonarqube-nexus-argocd
+mvn-devops/devops.sh setup --pipeline jenkins-complete
 ```
 
 Questions:
@@ -153,7 +153,7 @@ git push
 Step 4. Set it up:
 
 ```bash
-mvn-devops/devops.sh setup --pipeline maven-container-kubernetes
+mvn-devops/devops.sh setup --pipeline maven-basic
 ```
 
 Questions:
@@ -169,10 +169,10 @@ Step 5. Run the pipeline:
 mvn-devops/devops.sh run
 ```
 
-Step 6. Approve production:
+Step 6. Open the application on the machine:
 
 ```bash
-mvn-devops/devops.sh run --phase prod
+mvn-devops/devops.sh urls
 ```
 
 To choose the tools yourself instead of step 4, follow guide 2 and choose

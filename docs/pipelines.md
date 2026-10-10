@@ -6,7 +6,7 @@ the menu and the questions:
 
 ```bash
 mvn-devops/devops.sh pipelines                              # what there is
-mvn-devops/devops.sh setup --pipeline jenkins-sonarqube-nexus
+mvn-devops/devops.sh setup --pipeline jenkins-complete
 ```
 
 `setup` then asks only what cannot be chosen for you: your GitHub user and
@@ -17,29 +17,27 @@ downloaded when they start, as with any other setup.
 
 | Pipeline | Orchestrator | Tools | Environments |
 |---|---|---|---|
-| `maven-sonarqube-nexus` | maven | SonarQube, Nexus | |
-| `jenkins-sonarqube-nexus` | Jenkins | SonarQube, Nexus | |
-| `concourse-sonarqube-nexus` | Concourse | SonarQube, Nexus | |
-| `maven-docker-host` | maven | registry, Docker Compose over SSH | dev test staging prod |
-| `jenkins-kubernetes` | Jenkins | SonarQube, Nexus, registry, Trivy, Syft, Cosign, Kubernetes | dev test staging prod |
-| `jenkins-observability` | Jenkins | registry, Docker Compose over SSH, PostgreSQL, Prometheus, Loki, k6 | dev test staging prod |
-| `concourse-argocd` | Concourse | registry, Argo CD, Vault, Sealed Secrets | dev test staging prod |
-| `jenkins-sonarqube-nexus-argocd` | Jenkins | SonarQube, Nexus, registry, Argo CD | dev test staging prod |
-| `maven-container-sonarqube-nexus` | maven-container | SonarQube, Nexus | |
-| `maven-container-kubernetes` | maven-container | registry, Trivy, Kubernetes, PostgreSQL | dev staging prod |
-| `maven-kubernetes` | maven | registry, Kubernetes | dev test staging prod |
-| `concourse-kubernetes-vault` | Concourse | SonarQube, registry, Kubernetes, Vault, PostgreSQL | dev test staging prod |
-| `jenkins-argocd-observability` | Jenkins | registry, Argo CD, Prometheus, Loki, k6 | dev test staging prod |
-| `concourse-docker-host-secure` | Concourse | registry, Trivy, Syft, Cosign, Docker Compose over SSH, PostgreSQL | dev staging prod |
-| `maven-sonarqube-github` | maven | SonarQube, GitHub Packages, GitHub Pages | |
-| `jenkins-complete` | Jenkins | SonarQube, Nexus, registry, Trivy, Syft, Cosign, Argo CD, Vault, PostgreSQL, Prometheus, Loki, k6 | dev test staging prod |
+| `maven-basic` | maven-container | registry, Docker Compose over SSH | prod |
+| `maven-complete` | maven-container | every tool below | dev test staging prod |
+| `jenkins-complete` | Jenkins | every tool below | dev test staging prod |
+| `concourse-complete` | Concourse | every tool below | dev test staging prod |
 
-Only `prod` waits for approval, except in `concourse-kubernetes-vault`, where
-staging does too; see [Environments](deployment.md#environments).
-`concourse-argocd` releases prod as a canary. The end-to-end test runs every
-combination on GitHub's runners except `maven-sonarqube-github`, which needs
-a real GitHub repository. `jenkins-complete` is the heaviest: it starts every
-tool at once.
+`maven-basic` builds and tests the project in a container that checks it
+out of GitHub, pushes the image to a registry and runs it with Docker Compose
+on a machine (a simulated one in Docker unless `DEPLOY_SERVER_URL` names
+yours). It has one environment, `prod`, that needs no approval: every
+pipeline that passes is deployed.
+
+The three complete pipelines have every tool that needs no account outside
+your machine: SonarQube, Nexus, a registry, Trivy, Syft and Cosign, Argo CD
+on Kubernetes with Vault and Sealed Secrets, PostgreSQL, Prometheus, Grafana
+and Loki, and k6. They deploy to `dev`, `test`, `staging` and `prod`; only
+`prod` waits for approval and is released as a canary. They differ only in
+the orchestrator. Every tool runs at once, so give Docker plenty of memory.
+
+For any other combination, pick the tools from the menu (`init`) or write a
+pipeline of your own (below). The end-to-end test runs the four pipelines
+and many other combinations on GitHub's runners.
 
 Step by step: [getting-started.md](getting-started.md#guide-1-a-ready-made-pipeline).
 

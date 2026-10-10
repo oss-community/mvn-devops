@@ -23,9 +23,11 @@ First release.
   that is neither secret nor personal. Commit it: a teammate's `setup` asks
   only for their own tokens and user names. Passwords and keys stay in
   `.devops/`.
-- 16 ready-made pipelines in `pipelines/`, from Maven with SonarQube and Nexus
-  up to Jenkins with every kind of tool. `setup --pipeline <name or file>`
-  sets one up and generates new passwords, tokens and keys for each project.
+- Four ready-made pipelines in `pipelines/`: `maven-basic` (build, test and
+  run the image with Docker Compose on a machine) and `maven-complete`,
+  `jenkins-complete` and `concourse-complete` with every tool.
+  `setup --pipeline <name or file>` sets one up and generates new passwords,
+  tokens and keys for each project.
 - No profiles, plugins or `distributionManagement` in the project's pom:
   plugins are called by their coordinates.
 

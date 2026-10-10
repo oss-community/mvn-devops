@@ -95,7 +95,7 @@ answer only for your GitHub user and token
 
 ```bash
 mvn-devops/devops.sh pipelines
-mvn-devops/devops.sh setup --pipeline jenkins-sonarqube-nexus
+mvn-devops/devops.sh setup --pipeline maven-basic
 ```
 
 Without questions, for scripts and CI:

@@ -215,7 +215,9 @@ application stays up. When the new version does not become ready within
 
 **The generic chart** ([templates/helm/app](../templates/helm/app)) has a
 Deployment with readiness and liveness probes, resource requests, a rolling
-update strategy and a Service. The container gets `DEPLOY_ENVIRONMENT`, and
+update strategy and a Service. A stopped pod keeps serving for 5 seconds
+(`shutdownDelay`, needs Kubernetes 1.30) while the Service stops sending it
+new connections, so a release drops no requests. The container gets `DEPLOY_ENVIRONMENT`, and
 every key of the Secret `<app>-env` in its namespace. With Vault (see
 [Secrets](#secrets)) the release creates that Secret from the environment's
 secrets (`secretEnv`) and the pods wait for it; without, it is used when it

@@ -3,6 +3,14 @@
 Every release of mvn-devops. The section of a version is also the text of its
 GitHub release.
 
+## Unreleased
+
+### Fixed
+
+- Argo CD on the built-in Kubernetes no longer fails when public.ecr.aws
+  refuses anonymous downloads: k3s fetches Docker Official Images from
+  public.ecr.aws through mirror.gcr.io first.
+
 ## 1.0.0
 
 First release.

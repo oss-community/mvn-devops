@@ -99,7 +99,7 @@ workflow, on every push to `main` and on pull requests, after shellcheck.
 [examples/hello-data](../examples/hello-data) with a database. It serves the
 project from a local git server, so it needs no GitHub token. With `jfrog` it
 checks the setup only, because Artifactory OSS repositories have to be created
-in its Quick Setup wizard. The `e2e` workflow runs it every night and by hand
+in its Quick Setup wizard. The `e2e` workflow runs it by hand
 (Actions > e2e > Run workflow) with the maven-complete, jenkins-complete and
 concourse-complete pipelines.
 

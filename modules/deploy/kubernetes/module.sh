@@ -50,6 +50,10 @@ module_prepare() {
   } > "$(module_compose_extra "$MODULE_ID")"
   {
     printf 'mirrors:\n'
+    # Docker Official Images from public.ecr.aws (Argo CD's redis) through
+    # Google's Docker Hub cache, which has no anonymous data limit; the
+    # default endpoint stays the fallback.
+    printf '  "public.ecr.aws":\n    endpoint:\n      - "https://mirror.gcr.io"\n    rewrite:\n      "^docker/library/(.*)": "library/$1"\n'
     if [[ " $MODULES " == *" image/docker-registry "* ]] && ! server_external REGISTRY; then
       printf '  "localhost:%s":\n    endpoint:\n      - "http://registry:5000"\n' "$(value REGISTRY_HOST_PORT 5000)"
     fi
